@@ -43,6 +43,8 @@
             // Auth States
             const [isAuthenticated, setIsAuthenticated] = useState(false);
             const [credentials, setCredentials] = useState({ userId: '', password: '' });
+            const [userRole, setUserRole] = useState('Normal'); // 'Admin' or 'Normal'
+            const [loggedInUserId, setLoggedInUserId] = useState('');
             const [isAuthenticating, setIsAuthenticating] = useState(false);
             const [authError, setAuthError] = useState('');
 
@@ -79,7 +81,15 @@
 
             useEffect(() => {
                 const sessionUser = sessionStorage.getItem('portal_user_id');
-                if (sessionUser) setIsAuthenticated(true);
+                const sessionRole = sessionStorage.getItem('portal_user_role') || 'Normal';
+                if (sessionUser) {
+                    setIsAuthenticated(true);
+                    setLoggedInUserId(sessionUser);
+                    setUserRole(sessionRole);
+                    if (sessionRole !== 'Admin') {
+                        setFormData(prev => ({ ...prev, empId: sessionUser }));
+                    }
+                }
             }, []);
 
             useEffect(() => {
@@ -93,10 +103,16 @@
                 localStorage.setItem('user_private_records', JSON.stringify(records));
             }, [records]);
 
-            // Fetch Dropdown Options on load
             useEffect(() => {
                 fetchDropdownOptions();
             }, []);
+
+            // Auto-fetch employee details for normal users once authenticated
+            useEffect(() => {
+                if (isAuthenticated && userRole !== 'Admin' && loggedInUserId) {
+                    handleFetchDataForId(loggedInUserId);
+                }
+            }, [isAuthenticated, userRole, loggedInUserId]);
 
             const fetchDropdownOptions = async () => {
                 setIsLoadingOptions(true);
@@ -147,7 +163,6 @@
                 return duplicateCount === 0 ? baseFormattedDate : `${baseFormattedDate}-${duplicateCount}`;
             };
 
-            // BULLETPROOF JSONP HANDLER WITH AUTO-RETRY & EXTENDED TIMEOUT
             const jsonpRequest = (params, retries = 3) => {
                 return new Promise((resolve, reject) => {
                     const attempt = (remainingRetries) => {
@@ -156,7 +171,6 @@
                         const timeoutId = setTimeout(() => {
                             cleanup();
                             if (remainingRetries > 0) {
-                                console.warn(`Connection timeout. Retrying... (${remainingRetries} attempts left)`);
                                 attempt(remainingRetries - 1);
                             } else {
                                 reject(new Error('Server response timed out. Please try again.'));
@@ -205,15 +219,25 @@
                 setAuthError('');
 
                 try {
+                    const cleanUserId = credentials.userId.trim();
                     const data = await jsonpRequest({
                         action: 'login',
-                        userId: credentials.userId.trim(),
+                        userId: cleanUserId,
                         password: credentials.password.trim()
                     });
 
                     if (data.status === 'success') {
+                        const role = data.role || 'Normal';
                         setIsAuthenticated(true);
-                        sessionStorage.setItem('portal_user_id', credentials.userId);
+                        setUserRole(role);
+                        setLoggedInUserId(cleanUserId);
+
+                        sessionStorage.setItem('portal_user_id', cleanUserId);
+                        sessionStorage.setItem('portal_user_role', role);
+
+                        if (role !== 'Admin') {
+                            setFormData(prev => ({ ...prev, empId: cleanUserId }));
+                        }
                     } else if (data.status === 'invalid') {
                         setAuthError('❌ Invalid User ID or Password.');
                     } else {
@@ -228,7 +252,10 @@
 
             const handleLogout = () => {
                 sessionStorage.removeItem('portal_user_id');
+                sessionStorage.removeItem('portal_user_role');
                 setIsAuthenticated(false);
+                setUserRole('Normal');
+                setLoggedInUserId('');
                 setCredentials({ userId: '', password: '' });
             };
 
@@ -246,21 +273,21 @@
             };
 
             const handleEmpIdChange = (e) => {
+                if (userRole !== 'Admin') return; // Read-only for Normal users
                 const numericValue = e.target.value.replace(/\D/g, '');
                 setFormData(prev => ({ ...prev, empId: numericValue }));
             };
 
-            const handleFetchData = async () => {
-                if (!formData.empId) {
-                    showToast('⚠️ Please enter an EMP ID first.');
-                    return;
-                }
+            const handleFetchDataForId = async (empIdToFetch) => {
+                if (!empIdToFetch) return;
 
                 setIsFetchingEmp(true);
                 try {
                     const data = await jsonpRequest({
                         action: 'getEmpName',
-                        empId: formData.empId.trim()
+                        empId: empIdToFetch.trim(),
+                        requestingUserId: loggedInUserId,
+                        userRole: userRole
                     });
 
                     if (data.status === 'success') {
@@ -279,6 +306,15 @@
                 } finally {
                     setIsFetchingEmp(false);
                 }
+            };
+
+            const handleFetchData = () => {
+                const targetId = userRole === 'Admin' ? formData.empId : loggedInUserId;
+                if (!targetId) {
+                    showToast('⚠️ Please enter an EMP ID first.');
+                    return;
+                }
+                handleFetchDataForId(targetId);
             };
 
             const handleSubmit = async (e) => {
@@ -359,7 +395,7 @@
                     setPdfData(newRecord);
 
                     setFormData({
-                        empId: '',
+                        empId: userRole !== 'Admin' ? loggedInUserId : '',
                         fullName: '',
                         department: '',
                         email: '',
@@ -503,7 +539,7 @@
                                     <div className="flex items-center space-x-2 mt-0.5">
                                         <span className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-pulse"></span>
                                         <p className="text-[10px] font-bold tracking-widest text-cyan-400/80 uppercase">
-                                            Enterprise Portal
+                                            Role: <span className="text-amber-300">{userRole}</span> ({loggedInUserId})
                                         </p>
                                     </div>
                                 </div>
@@ -801,8 +837,10 @@
 
                             {/* ROW 1 */}
                             <div className="flex flex-wrap items-center gap-3">
-                                <div className="w-full sm:w-32">
-                                    <label className="block text-sm font-bold text-slate-200 mb-1">EMP ID *</label>
+                                <div className="w-full sm:w-36">
+                                    <label className="block text-sm font-bold text-slate-200 mb-1">
+                                        EMP ID * {userRole !== 'Admin' && <span className="text-xs text-amber-400 font-normal">(Locked)</span>}
+                                    </label>
                                     <input 
                                         type="text" 
                                         name="empId" 
@@ -812,7 +850,8 @@
                                         inputMode="numeric"
                                         placeholder="e.g. 123456789"
                                         required
-                                        className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-slate-100 focus:outline-none focus:border-cyan-500 tracking-wider font-mono text-sm"
+                                        disabled={userRole !== 'Admin'}
+                                        className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-slate-100 focus:outline-none focus:border-cyan-500 tracking-wider font-mono text-sm disabled:bg-slate-800 disabled:text-slate-400 disabled:cursor-not-allowed"
                                     />
                                 </div>
 
