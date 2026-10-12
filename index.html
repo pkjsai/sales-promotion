@@ -46,6 +46,12 @@
             const [isAuthenticating, setIsAuthenticating] = useState(false);
             const [authError, setAuthError] = useState('');
 
+            // Dropdown Dynamic Options
+            const [locations, setLocations] = useState([]);
+            const [eventTypes, setEventTypes] = useState([]);
+            const [beneficiaryCategories, setBeneficiaryCategories] = useState([]);
+            const [isLoadingOptions, setIsLoadingOptions] = useState(false);
+
             // App Form States
             const [formData, setFormData] = useState({
                 empId: '',
@@ -87,6 +93,27 @@
                 localStorage.setItem('user_private_records', JSON.stringify(records));
             }, [records]);
 
+            // Fetch Dropdown Options on load
+            useEffect(() => {
+                fetchDropdownOptions();
+            }, []);
+
+            const fetchDropdownOptions = async () => {
+                setIsLoadingOptions(true);
+                try {
+                    const data = await jsonpRequest({ action: 'getDropdownOptions' });
+                    if (data.status === 'success') {
+                        setLocations(data.locations || []);
+                        setEventTypes(data.eventTypes || []);
+                        setBeneficiaryCategories(data.beneficiaryCategories || []);
+                    }
+                } catch (err) {
+                    console.error('Error fetching dropdown options:', err);
+                } finally {
+                    setIsLoadingOptions(false);
+                }
+            };
+
             const showToast = (msg) => {
                 setToast(msg);
                 setTimeout(() => setToast(''), 4500);
@@ -126,7 +153,6 @@
                     const attempt = (remainingRetries) => {
                         const callbackName = 'jsonp_cb_' + Math.round(1000000 * Math.random());
                         
-                        // 25-second timeout per attempt to accommodate Google Script cold starts
                         const timeoutId = setTimeout(() => {
                             cleanup();
                             if (remainingRetries > 0) {
@@ -827,7 +853,7 @@
                                 </div>
                             </div>
 
-                            {/* ROW 2 */}
+                            {/* ROW 2 - DYNAMIC DROPDOWNS FROM SHEET "Input" */}
                             <div className="flex flex-wrap items-center gap-3 pt-1">
                                 <div className="w-full sm:flex-1 min-w-[180px]">
                                     <label className="block text-sm font-bold text-slate-200 mb-1">Location</label>
@@ -835,13 +861,13 @@
                                         name="location" 
                                         value={formData.location} 
                                         onChange={handleChange} 
-                                        className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-slate-100 focus:outline-none focus:border-cyan-500 text-sm"
+                                        disabled={isLoadingOptions}
+                                        className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-slate-100 focus:outline-none focus:border-cyan-500 text-sm disabled:opacity-50"
                                     >
                                         <option value="">Select Location</option>
-                                        <option value="Headquarters">Headquarters</option>
-                                        <option value="Branch Office">Branch Office</option>
-                                        <option value="Remote">Remote</option>
-                                        <option value="On-Site">On-Site</option>
+                                        {locations.map((item, idx) => (
+                                            <option key={idx} value={item}>{item}</option>
+                                        ))}
                                     </select>
                                 </div>
 
@@ -851,13 +877,13 @@
                                         name="eventType" 
                                         value={formData.eventType} 
                                         onChange={handleChange} 
-                                        className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-slate-100 focus:outline-none focus:border-cyan-500 text-sm"
+                                        disabled={isLoadingOptions}
+                                        className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-slate-100 focus:outline-none focus:border-cyan-500 text-sm disabled:opacity-50"
                                     >
                                         <option value="">Select Event Type</option>
-                                        <option value="Training">Training</option>
-                                        <option value="Workshop">Workshop</option>
-                                        <option value="Seminar">Seminar</option>
-                                        <option value="CSR Drive">CSR Drive</option>
+                                        {eventTypes.map((item, idx) => (
+                                            <option key={idx} value={item}>{item}</option>
+                                        ))}
                                     </select>
                                 </div>
 
@@ -867,13 +893,13 @@
                                         name="beneficiaryCategory" 
                                         value={formData.beneficiaryCategory} 
                                         onChange={handleChange} 
-                                        className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-slate-100 focus:outline-none focus:border-cyan-500 text-sm"
+                                        disabled={isLoadingOptions}
+                                        className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-slate-100 focus:outline-none focus:border-cyan-500 text-sm disabled:opacity-50"
                                     >
                                         <option value="">Select Category</option>
-                                        <option value="Internal Employees">Internal Employees</option>
-                                        <option value="Students">Students</option>
-                                        <option value="Community Members">Community Members</option>
-                                        <option value="Vendors">Vendors</option>
+                                        {beneficiaryCategories.map((item, idx) => (
+                                            <option key={idx} value={item}>{item}</option>
+                                        ))}
                                     </select>
                                 </div>
                             </div>
