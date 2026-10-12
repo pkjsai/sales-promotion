@@ -45,6 +45,7 @@
             const [credentials, setCredentials] = useState({ userId: '', password: '' });
             const [userRole, setUserRole] = useState('Normal');
             const [loggedInUserId, setLoggedInUserId] = useState('');
+            const [loggedInUserName, setLoggedInUserName] = useState('');
             const [isAuthenticating, setIsAuthenticating] = useState(false);
             const [authError, setAuthError] = useState('');
 
@@ -82,10 +83,14 @@
             useEffect(() => {
                 const sessionUser = sessionStorage.getItem('portal_user_id');
                 const sessionRole = sessionStorage.getItem('portal_user_role') || 'Normal';
+                const sessionName = sessionStorage.getItem('portal_user_name') || '';
+
                 if (sessionUser) {
                     setIsAuthenticated(true);
                     setLoggedInUserId(sessionUser);
                     setUserRole(sessionRole);
+                    setLoggedInUserName(sessionName);
+
                     if (sessionRole !== 'Admin') {
                         setFormData(prev => ({ ...prev, empId: sessionUser }));
                     }
@@ -114,10 +119,10 @@
                 }
             }, [isAuthenticated, userRole, loggedInUserId]);
 
-            // Helper to extract first name in UPPERCASE
-            const getFirstName = (fullName) => {
-                if (!fullName) return '';
-                return fullName.trim().split(' ')[0].toUpperCase();
+            // Helper to get first name in UPPERCASE from Column D "User Name"
+            const getFirstName = (nameStr) => {
+                if (!nameStr) return '';
+                return nameStr.trim().split(' ')[0].toUpperCase();
             };
 
             const fetchDropdownOptions = async () => {
@@ -234,16 +239,34 @@
 
                     if (data.status === 'success') {
                         const role = data.role || 'Normal';
+                        const fetchedUserName = data.userName || '';
+
                         setIsAuthenticated(true);
                         setUserRole(role);
                         setLoggedInUserId(cleanUserId);
+                        setLoggedInUserName(fetchedUserName);
 
                         sessionStorage.setItem('portal_user_id', cleanUserId);
                         sessionStorage.setItem('portal_user_role', role);
+                        sessionStorage.setItem('portal_user_role', role);
+                        sessionStorage.setItem('portal_user_name', fetchedUserName);
 
-                        if (role !== 'Admin') {
-                            setFormData(prev => ({ ...prev, empId: cleanUserId }));
-                        }
+                        // Reset form fields completely on login
+                        setFormData({
+                            empId: role !== 'Admin' ? cleanUserId : '',
+                            fullName: '',
+                            department: '',
+                            email: '',
+                            location: '',
+                            eventType: '',
+                            beneficiaryCategory: '',
+                            contributionAmt: '',
+                            eventDate: '',
+                            beneficiaryName: '',
+                            ioNo: '',
+                            glCode: '230189',
+                            notes: ''
+                        });
                     } else if (data.status === 'invalid') {
                         setAuthError('❌ Invalid User ID or Password.');
                     } else {
@@ -257,12 +280,34 @@
             };
 
             const handleLogout = () => {
+                // Clear all Session Storage items
                 sessionStorage.removeItem('portal_user_id');
                 sessionStorage.removeItem('portal_user_role');
+                sessionStorage.removeItem('portal_user_name');
+
+                // Clear all App States
                 setIsAuthenticated(false);
                 setUserRole('Normal');
                 setLoggedInUserId('');
+                setLoggedInUserName('');
                 setCredentials({ userId: '', password: '' });
+
+                // Fully reset form inputs on logout
+                setFormData({
+                    empId: '',
+                    fullName: '',
+                    department: '',
+                    email: '',
+                    location: '',
+                    eventType: '',
+                    beneficiaryCategory: '',
+                    contributionAmt: '',
+                    eventDate: '',
+                    beneficiaryName: '',
+                    ioNo: '',
+                    glCode: '230189',
+                    notes: ''
+                });
             };
 
             const handleChange = (e) => {
@@ -281,7 +326,13 @@
             const handleEmpIdChange = (e) => {
                 if (userRole !== 'Admin') return;
                 const numericValue = e.target.value.replace(/\D/g, '');
-                setFormData(prev => ({ ...prev, empId: numericValue }));
+                setFormData(prev => ({ 
+                    ...prev, 
+                    empId: numericValue,
+                    fullName: '',
+                    department: '',
+                    email: ''
+                }));
             };
 
             const handleFetchDataForId = async (empIdToFetch) => {
@@ -299,12 +350,18 @@
                     if (data.status === 'success') {
                         setFormData(prev => ({ 
                             ...prev, 
-                            fullName: data.empFullName || prev.fullName,
-                            department: data.department || prev.department,
-                            email: data.email || prev.email
+                            fullName: data.empFullName || '',
+                            department: data.department || '',
+                            email: data.email || ''
                         }));
                         showToast('✅ Employee data captured from server!');
                     } else {
+                        setFormData(prev => ({ 
+                            ...prev, 
+                            fullName: '',
+                            department: '',
+                            email: ''
+                        }));
                         showToast('⚠️ Employee record not found.');
                     }
                 } catch (err) {
@@ -400,11 +457,12 @@
                     
                     setPdfData(newRecord);
 
+                    // Reset variable fields but keep user details
                     setFormData(prev => ({
                         empId: userRole !== 'Admin' ? loggedInUserId : '',
-                        fullName: prev.fullName,
-                        department: prev.department,
-                        email: prev.email,
+                        fullName: userRole !== 'Admin' ? prev.fullName : '',
+                        department: userRole !== 'Admin' ? prev.department : '',
+                        email: userRole !== 'Admin' ? prev.email : '',
                         location: '',
                         eventType: '',
                         beneficiaryCategory: '',
@@ -546,8 +604,8 @@
                                         <span className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-pulse"></span>
                                         <p className="text-[10px] font-bold tracking-widest text-cyan-400/80 uppercase">
                                             Role: <span className="text-amber-300">{userRole}</span> ({loggedInUserId})
-                                            {formData.fullName && (
-                                                <span className="text-emerald-300"> - "{getFirstName(formData.fullName)}"</span>
+                                            {loggedInUserName && (
+                                                <span className="text-emerald-300"> - "{getFirstName(loggedInUserName)}"</span>
                                             )}
                                         </p>
                                     </div>
