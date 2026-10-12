@@ -43,7 +43,7 @@
             // Auth States
             const [isAuthenticated, setIsAuthenticated] = useState(false);
             const [credentials, setCredentials] = useState({ userId: '', password: '' });
-            const [userRole, setUserRole] = useState('Normal'); // 'Admin' or 'Normal'
+            const [userRole, setUserRole] = useState('Normal');
             const [loggedInUserId, setLoggedInUserId] = useState('');
             const [isAuthenticating, setIsAuthenticating] = useState(false);
             const [authError, setAuthError] = useState('');
@@ -113,6 +113,12 @@
                     handleFetchDataForId(loggedInUserId);
                 }
             }, [isAuthenticated, userRole, loggedInUserId]);
+
+            // Helper to extract first name in UPPERCASE
+            const getFirstName = (fullName) => {
+                if (!fullName) return '';
+                return fullName.trim().split(' ')[0].toUpperCase();
+            };
 
             const fetchDropdownOptions = async () => {
                 setIsLoadingOptions(true);
@@ -273,7 +279,7 @@
             };
 
             const handleEmpIdChange = (e) => {
-                if (userRole !== 'Admin') return; // Read-only for Normal users
+                if (userRole !== 'Admin') return;
                 const numericValue = e.target.value.replace(/\D/g, '');
                 setFormData(prev => ({ ...prev, empId: numericValue }));
             };
@@ -394,11 +400,11 @@
                     
                     setPdfData(newRecord);
 
-                    setFormData({
+                    setFormData(prev => ({
                         empId: userRole !== 'Admin' ? loggedInUserId : '',
-                        fullName: '',
-                        department: '',
-                        email: '',
+                        fullName: prev.fullName,
+                        department: prev.department,
+                        email: prev.email,
                         location: '',
                         eventType: '',
                         beneficiaryCategory: '',
@@ -408,7 +414,7 @@
                         ioNo: '',
                         glCode: '230189',
                         notes: ''
-                    });
+                    }));
                 } catch (err) {
                     showToast('❌ Error submitting data.');
                 } finally {
@@ -540,6 +546,9 @@
                                         <span className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-pulse"></span>
                                         <p className="text-[10px] font-bold tracking-widest text-cyan-400/80 uppercase">
                                             Role: <span className="text-amber-300">{userRole}</span> ({loggedInUserId})
+                                            {formData.fullName && (
+                                                <span className="text-emerald-300"> - "{getFirstName(formData.fullName)}"</span>
+                                            )}
                                         </p>
                                     </div>
                                 </div>
