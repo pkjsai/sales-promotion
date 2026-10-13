@@ -37,7 +37,7 @@
         const { useState, useEffect } = React;
 
         // PASTE YOUR WEBSCRIPT DEPLOYMENT URL HERE (MUST END WITH /exec)
-        const API_URL = "https://script.google.com/macros/s/AKfycbwDcANmvvvzWKurM8oeVqzky6oRl7-geRY3UZRQbnz1hFbNmVRcikvoUhqvqQ2AhmnMmg/exec";
+        const API_URL = "https://script.google.com/macros/s/AKfycbwegeAMEVGmm3S85ObAuhq7n2x_20oFENZ4FPIxkfbKxVwUnDMbuAW8-lfcQl62sKGvg/exec";
 
         function App() {
             // Auth States
@@ -122,7 +122,6 @@
                 }
             }, [isAuthenticated, userRole, loggedInUserId]);
 
-            // Helper to get first name in UPPERCASE from Column D "User Name"
             const getFirstName = (nameStr) => {
                 if (!nameStr) return '';
                 return nameStr.trim().split(' ')[0].toUpperCase();
@@ -271,7 +270,6 @@
                             fetchAdminRecords();
                         }
 
-                        // Reset form fields
                         setFormData({
                             empId: role !== 'Admin' ? cleanUserId : '',
                             fullName: '',
@@ -287,10 +285,8 @@
                             glCode: '230189',
                             notes: ''
                         });
-                    } else if (data.status === 'invalid') {
-                        setAuthError('❌ Invalid User ID or Password.');
                     } else {
-                        setAuthError(`❌ ${data.message || 'Login failed.'}`);
+                        setAuthError('❌ Invalid User ID or Password.');
                     }
                 } catch (err) {
                     setAuthError('❌ Network connection error. Please try logging in again.');
@@ -300,10 +296,7 @@
             };
 
             const handleLogout = () => {
-                sessionStorage.removeItem('portal_user_id');
-                sessionStorage.removeItem('portal_user_role');
-                sessionStorage.removeItem('portal_user_name');
-
+                sessionStorage.clear();
                 setIsAuthenticated(false);
                 setUserRole('Normal');
                 setLoggedInUserId('');
@@ -349,9 +342,7 @@
                 try {
                     const data = await jsonpRequest({
                         action: 'getEmpName',
-                        empId: empIdToFetch.trim(),
-                        requestingUserId: loggedInUserId,
-                        userRole: userRole
+                        empId: empIdToFetch.trim()
                     });
 
                     if (data.status === 'success') {
@@ -712,7 +703,9 @@
                                         <tr>
                                             <th className="px-3 py-2">Row</th>
                                             <th className="px-3 py-2">EMP ID</th>
-                                            <th className="px-3 py-2">Name (Col C)</th>
+                                            <th className="px-3 py-2">Name</th>
+                                            <th className="px-3 py-2">Department</th>
+                                            <th className="px-3 py-2">Email</th>
                                             <th className="px-3 py-2">Event Date</th>
                                             <th className="px-3 py-2">Amt</th>
                                             <th className="px-3 py-2">GL Code</th>
@@ -724,7 +717,7 @@
                                     <tbody className="divide-y divide-slate-700">
                                         {allAdminRecords.length === 0 ? (
                                             <tr>
-                                                <td colSpan="9" className="text-center py-4 text-slate-400 italic">No submissions found in Google Sheet.</td>
+                                                <td colSpan="11" className="text-center py-4 text-slate-400 italic">No submissions found in Google Sheet.</td>
                                             </tr>
                                         ) : (
                                             allAdminRecords.map((rec) => (
@@ -732,6 +725,8 @@
                                                     <td className="px-3 py-2 font-mono text-slate-400">{rec.rowIndex}</td>
                                                     <td className="px-3 py-2 font-mono text-cyan-300 font-bold">{rec.empId}</td>
                                                     <td className="px-3 py-2 font-medium text-white">{rec.fullName}</td>
+                                                    <td className="px-3 py-2">{rec.department}</td>
+                                                    <td className="px-3 py-2">{rec.email}</td>
                                                     <td className="px-3 py-2 font-mono">{rec.eventDate}</td>
                                                     <td className="px-3 py-2 font-bold text-amber-300">₹{rec.contributionAmt}</td>
                                                     <td className="px-3 py-2 font-mono">{rec.glCode}</td>
@@ -957,7 +952,7 @@
                                             </p>
                                         </div>
 
-                                        {/* SAP Document No line after Declaration */}
+                                        {/* SAP Document No line */}
                                         <div style={{ marginTop: '40px', marginBottom: '30px', paddingLeft: '4px' }}>
                                             <p style={{ fontSize: '12px', fontWeight: 'bold', color: '#334155', margin: 0 }}>
                                                 SAP Document No: <span style={{ borderBottom: '1px solid #94a3b8', display: 'inline-block', width: '220px', marginLeft: '8px' }}>&nbsp;</span>
