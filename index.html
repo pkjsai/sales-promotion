@@ -10,15 +10,37 @@
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <style>
+        @media print {
+            body {
+                background: white !important;
+                color: black !important;
+            }
+            body > div:not(#print-root) {
+                display: none !important;
+            }
+            #print-root {
+                display: block !important;
+                position: absolute !important;
+                left: 0 !important;
+                top: 0 !important;
+                width: 100% !important;
+            }
+        }
+    </style>
 </head>
 <body class="bg-slate-900 text-slate-100 min-h-screen">
     <div id="root"></div>
+    <div id="print-root" class="hidden"></div>
 
     <script type="text/babel">
         const { useState, useEffect } = React;
-        const API_URL = "https://script.google.com/macros/s/AKfycbwegeAMEVGmm3S85ObAuhq7n2x_20oFENZ4FPIxkfbFkxVWUnDMbuAW8-lfcQl62sKGvg/exec";
+
+        // PASTE YOUR WEBSCRIPT DEPLOYMENT URL HERE (MUST END WITH /exec)
+        const API_URL = "https://script.google.com/macros/s/AKfycbwegeAMEVGmm3S85ObAuhq7n2x_20oFENZ4FPIxkfbKxVwUnDMbuAW8-lfcQl62sKGvg/exec";
 
         function App() {
+            // Auth States
             const [isAuthenticated, setIsAuthenticated] = useState(false);
             const [credentials, setCredentials] = useState({ userId: '', password: '' });
             const [userRole, setUserRole] = useState('Normal');
@@ -27,16 +49,27 @@
             const [isAuthenticating, setIsAuthenticating] = useState(false);
             const [authError, setAuthError] = useState('');
 
-            // Dropdown Options
+            // Dropdown Dynamic Options
             const [locations, setLocations] = useState([]);
             const [eventTypes, setEventTypes] = useState([]);
             const [beneficiaryCategories, setBeneficiaryCategories] = useState([]);
+            const [isLoadingOptions, setIsLoadingOptions] = useState(false);
 
-            // Form Data
+            // App Form States
             const [formData, setFormData] = useState({
-                empId: '', fullName: '', department: '', email: '', location: '',
-                eventType: '', beneficiaryCategory: '', contributionAmt: '',
-                eventDate: '', beneficiaryName: '', ioNo: '', glCode: '230189', notes: ''
+                empId: '',
+                fullName: '',
+                department: '',
+                email: '',
+                location: '',
+                eventType: '',
+                beneficiaryCategory: '',
+                contributionAmt: '',
+                eventDate: '',
+                beneficiaryName: '',
+                ioNo: '',
+                glCode: '230189',
+                notes: ''
             });
 
             const [records, setRecords] = useState([]);
@@ -44,6 +77,8 @@
             const [isSyncing, setIsSyncing] = useState(false);
             const [isFetchingEmp, setIsFetchingEmp] = useState(false);
             const [toast, setToast] = useState('');
+            const [showConfirmModal, setShowConfirmModal] = useState(false);
+            const [sameDateWarningModal, setSameDateWarningModal] = useState(false);
             const [pdfData, setPdfData] = useState(null);
 
             useEffect(() => {
@@ -56,37 +91,44 @@
                     setLoggedInUserId(sessionUser);
                     setUserRole(sessionRole);
                     setLoggedInUserName(sessionName);
-                    if (sessionRole === 'Admin') fetchAdminRecords();
-                    else setFormData(prev => ({ ...prev, empId: sessionUser }));
+
+                    if (sessionRole === 'Admin') {
+                        fetchAdminRecords();
+                    } else {
+                        setFormData(prev => ({ ...prev, empId: sessionUser }));
+                    }
                 }
             }, []);
+
+            useEffect(() => {
+                const saved = localStorage.getItem('user_private_records');
+                if (saved) {
+                    try { setRecords(JSON.parse(saved)); } catch (e) {}
+                }
+            }, []);
+
+            useEffect(() => {
+                localStorage.setItem('user_private_records', JSON.stringify(records));
+            }, [records]);
 
             useEffect(() => {
                 fetchDropdownOptions();
             }, []);
 
-            const showToast = (msg) => {
-                setToast(msg);
-                setTimeout(() => setToast(''), 4500);
-            };
+            // Auto-fetch employee details for normal users once authenticated
+            useEffect(() => {
+                if (isAuthenticated && userRole !== 'Admin' && loggedInUserId) {
+                    handleFetchDataForId(loggedInUserId);
+                }
+            }, [isAuthenticated, userRole, loggedInUserId]);
 
-            const jsonpRequest = (params) => {
-                return new Promise((resolve, reject) => {
-                    const callbackName = 'jsonp_cb_' + Math.round(1000000 * Math.random());
-                    window[callbackName] = (data) => {
-                        delete window[callbackName];
-                        if (script && script.parentNode) script.parentNode.removeChild(script);
-                        resolve(data);
-                    };
-                    const queryParams = new URLSearchParams({ ...params, callback: callbackName }).toString();
-                    const script = document.createElement('script');
-                    script.src = `${API_URL}?${queryParams}`;
-                    script.onerror = () => reject(new Error('Script execution error.'));
-                    document.body.appendChild(script);
-                });
+            const getFirstName = (nameStr) => {
+                if (!nameStr) return '';
+                return nameStr.trim().split(' ')[0].toUpperCase();
             };
 
             const fetchDropdownOptions = async () => {
+                setIsLoadingOptions(true);
                 try {
                     const data = await jsonpRequest({ action: 'getDropdownOptions' });
                     if (data.status === 'success') {
@@ -94,7 +136,11 @@
                         setEventTypes(data.eventTypes || []);
                         setBeneficiaryCategories(data.beneficiaryCategories || []);
                     }
-                } catch (e) {}
+                } catch (err) {
+                    console.error('Error fetching dropdown options:', err);
+                } finally {
+                    setIsLoadingOptions(false);
+                }
             };
 
             const fetchAdminRecords = async () => {
@@ -105,10 +151,93 @@
                         setAllAdminRecords(res.data || []);
                     }
                 } catch (e) {
-                    showToast('❌ Error loading records from Sheet.');
+                    showToast('❌ Error loading sheet records.');
                 } finally {
                     setIsSyncing(false);
                 }
+            };
+
+            const showToast = (msg) => {
+                setToast(msg);
+                setTimeout(() => setToast(''), 4500);
+            };
+
+            const isValidDDMMYY = (dateStr) => {
+                const regex = /^(0[1-9]|[12][0-9]|3[01])\.(0[1-9]|1[0-2])\.\d{2}$/;
+                return regex.test(dateStr);
+            };
+
+            const cleanDDMMYY = (rawDateStr) => {
+                if (!rawDateStr) return '';
+                return rawDateStr.replace(/\./g, '');
+            };
+
+            const handleEventDateChange = (e) => {
+                let val = e.target.value.replace(/[^0-9.]/g, '');
+                if (/^\d{6}$/.test(val)) {
+                    val = `${val.slice(0, 2)}.${val.slice(2, 4)}.${val.slice(4, 6)}`;
+                }
+                setFormData(prev => ({ ...prev, eventDate: val }));
+            };
+
+            const generateRefNumber = (empIdVal, eventDateVal, existingRecords) => {
+                const baseFormattedDate = cleanDDMMYY(eventDateVal);
+                const duplicateCount = existingRecords.filter(rec => 
+                    rec.empId === empIdVal &&
+                    cleanDDMMYY(rec.eventDate) === baseFormattedDate
+                ).length;
+
+                return duplicateCount === 0 ? baseFormattedDate : `${baseFormattedDate}-${duplicateCount}`;
+            };
+
+            const jsonpRequest = (params, retries = 3) => {
+                return new Promise((resolve, reject) => {
+                    const attempt = (remainingRetries) => {
+                        const callbackName = 'jsonp_cb_' + Math.round(1000000 * Math.random());
+                        
+                        const timeoutId = setTimeout(() => {
+                            cleanup();
+                            if (remainingRetries > 0) {
+                                attempt(remainingRetries - 1);
+                            } else {
+                                reject(new Error('Server response timed out. Please try again.'));
+                            }
+                        }, 25000);
+
+                        const cleanup = () => {
+                            clearTimeout(timeoutId);
+                            delete window[callbackName];
+                            if (script && script.parentNode) {
+                                script.parentNode.removeChild(script);
+                            }
+                        };
+
+                        window[callbackName] = (data) => {
+                            cleanup();
+                            resolve(data);
+                        };
+
+                        const queryParams = new URLSearchParams({
+                            ...params,
+                            callback: callbackName
+                        }).toString();
+
+                        const script = document.createElement('script');
+                        script.src = `${API_URL}?${queryParams}`;
+                        script.onerror = () => {
+                            cleanup();
+                            if (remainingRetries > 0) {
+                                attempt(remainingRetries - 1);
+                            } else {
+                                reject(new Error('Script execution error. Check API deployment.'));
+                            }
+                        };
+
+                        document.body.appendChild(script);
+                    };
+
+                    attempt(retries);
+                });
             };
 
             const handleLogin = async (e) => {
@@ -126,24 +255,41 @@
 
                     if (data.status === 'success') {
                         const role = data.role || 'Normal';
+                        const fetchedUserName = data.userName || '';
+
                         setIsAuthenticated(true);
                         setUserRole(role);
                         setLoggedInUserId(cleanUserId);
-                        setLoggedInUserName(data.userName || '');
+                        setLoggedInUserName(fetchedUserName);
 
                         sessionStorage.setItem('portal_user_id', cleanUserId);
                         sessionStorage.setItem('portal_user_role', role);
+                        sessionStorage.setItem('portal_user_name', fetchedUserName);
 
                         if (role === 'Admin') {
                             fetchAdminRecords();
-                        } else {
-                            setFormData(prev => ({ ...prev, empId: cleanUserId }));
                         }
+
+                        setFormData({
+                            empId: role !== 'Admin' ? cleanUserId : '',
+                            fullName: '',
+                            department: '',
+                            email: '',
+                            location: '',
+                            eventType: '',
+                            beneficiaryCategory: '',
+                            contributionAmt: '',
+                            eventDate: '',
+                            beneficiaryName: '',
+                            ioNo: '',
+                            glCode: '230189',
+                            notes: ''
+                        });
                     } else {
-                        setAuthError('❌ Invalid Credentials.');
+                        setAuthError('❌ Invalid User ID or Password.');
                     }
                 } catch (err) {
-                    setAuthError('❌ Connection Error.');
+                    setAuthError('❌ Network connection error. Please try logging in again.');
                 } finally {
                     setIsAuthenticating(false);
                 }
@@ -153,6 +299,85 @@
                 sessionStorage.clear();
                 setIsAuthenticated(false);
                 setUserRole('Normal');
+                setLoggedInUserId('');
+                setLoggedInUserName('');
+                setCredentials({ userId: '', password: '' });
+
+                setFormData({
+                    empId: '', fullName: '', department: '', email: '', location: '',
+                    eventType: '', beneficiaryCategory: '', contributionAmt: '',
+                    eventDate: '', beneficiaryName: '', ioNo: '', glCode: '230189', notes: ''
+                });
+            };
+
+            const handleChange = (e) => {
+                const { name, value } = e.target;
+                setFormData(prev => ({ ...prev, [name]: value }));
+            };
+
+            const handleGlCodeChange = (e) => {
+                let val = e.target.value;
+                if (!val.startsWith('230189')) {
+                    val = '230189';
+                }
+                setFormData(prev => ({ ...prev, glCode: val }));
+            };
+
+            const handleEmpIdChange = (e) => {
+                if (userRole !== 'Admin') return;
+                const numericValue = e.target.value.replace(/\D/g, '');
+                setFormData(prev => ({ 
+                    ...prev, 
+                    empId: numericValue,
+                    fullName: '',
+                    department: '',
+                    email: ''
+                }));
+            };
+
+            const handleFetchDataForId = async (empIdToFetch) => {
+                if (!empIdToFetch) return;
+
+                setIsFetchingEmp(true);
+                try {
+                    const data = await jsonpRequest({
+                        action: 'getEmpName',
+                        empId: empIdToFetch.trim(),
+                        requestingUserId: loggedInUserId,
+                        userRole: userRole
+                    });
+
+                    if (data.status === 'success') {
+                        setFormData(prev => ({ 
+                            ...prev, 
+                            fullName: data.empFullName || '',
+                            department: data.department || '',
+                            email: data.email || ''
+                        }));
+                        showToast('✅ Employee data captured from server!');
+                    } else {
+                        setFormData(prev => ({ 
+                            ...prev, 
+                            fullName: '',
+                            department: '',
+                            email: ''
+                        }));
+                        showToast('⚠️ Employee record not found.');
+                    }
+                } catch (err) {
+                    showToast('❌ Error fetching employee data.');
+                } finally {
+                    setIsFetchingEmp(false);
+                }
+            };
+
+            const handleFetchData = () => {
+                const targetId = userRole === 'Admin' ? formData.empId : loggedInUserId;
+                if (!targetId) {
+                    showToast('⚠️ Please enter an EMP ID first.');
+                    return;
+                }
+                handleFetchDataForId(targetId);
             };
 
             const handleAdminUpdate = async (rec) => {
@@ -160,27 +385,27 @@
                 try {
                     const res = await jsonpRequest({ action: 'updateRecord', ...rec });
                     if (res.status === 'success') {
-                        showToast('✅ Record Updated Successfully!');
+                        showToast('✅ Record Validated & Updated!');
                         fetchAdminRecords();
                     }
                 } catch (e) {
-                    showToast('❌ Update Failed');
+                    showToast('❌ Failed to update record');
                 } finally {
                     setIsSyncing(false);
                 }
             };
 
             const handleAdminDelete = async (rowIndex) => {
-                if (!confirm('Are you sure you want to delete this claim row from Google Sheet?')) return;
+                if (!confirm('Are you sure you want to delete this row from Google Sheet?')) return;
                 setIsSyncing(true);
                 try {
                     const res = await jsonpRequest({ action: 'deleteRecord', rowIndex });
                     if (res.status === 'success') {
-                        showToast('🗑️ Record Deleted from Sheet!');
+                        showToast('🗑️ Record Deleted!');
                         fetchAdminRecords();
                     }
                 } catch (e) {
-                    showToast('❌ Delete Failed');
+                    showToast('❌ Failed to delete record');
                 } finally {
                     setIsSyncing(false);
                 }
@@ -188,12 +413,60 @@
 
             const handleSubmit = async (e) => {
                 e.preventDefault();
+
+                if (!formData.fullName || !formData.email || !formData.empId || !formData.eventDate) {
+                    showToast('⚠️ Please fill in all required fields including Event Date.');
+                    return;
+                }
+
+                if (!isValidDDMMYY(formData.eventDate)) {
+                    showToast('❌ Invalid Date Format! Please enter in DD.MM.YY format (e.g. 12.05.26)');
+                    return;
+                }
+
+                const isStrictDuplicate = records.some(rec => 
+                    rec.empId === formData.empId &&
+                    cleanDDMMYY(rec.eventDate) === cleanDDMMYY(formData.eventDate) &&
+                    rec.beneficiaryName.trim().toLowerCase() === formData.beneficiaryName.trim().toLowerCase() &&
+                    rec.beneficiaryName.trim() !== ""
+                );
+
+                if (isStrictDuplicate) {
+                    showToast('❌ Submission Blocked: You have already submitted data for this Event Date and Beneficiary Name!');
+                    return;
+                }
+
+                const hasSameDateEntry = records.some(rec => 
+                    rec.empId === formData.empId &&
+                    cleanDDMMYY(rec.eventDate) === cleanDDMMYY(formData.eventDate)
+                );
+
+                if (hasSameDateEntry) {
+                    setSameDateWarningModal(true);
+                    return;
+                }
+
+                executeSubmission();
+            };
+
+            const executeSubmission = async () => {
                 setIsSyncing(true);
+                setSameDateWarningModal(false);
+
                 const timestamp = new Date().toLocaleString();
+                const refNumber = generateRefNumber(formData.empId, formData.eventDate, records);
+
+                const newRecord = { 
+                    id: Date.now(), 
+                    refNumber, 
+                    timestamp, 
+                    ...formData 
+                };
 
                 try {
                     await jsonpRequest({
                         action: 'submit',
+                        timestamp: timestamp,
                         empId: formData.empId,
                         fullName: formData.fullName,
                         department: formData.department,
@@ -204,30 +477,137 @@
                         beneficiaryCategory: formData.beneficiaryCategory,
                         beneficiaryName: formData.beneficiaryName,
                         contributionAmt: formData.contributionAmt,
+                        refNumber: refNumber,
                         notes: formData.notes,
                         glCode: formData.glCode,
                         ioNo: formData.ioNo
                     });
 
-                    showToast('✅ Claim Submitted Successfully!');
+                    setRecords(prev => [newRecord, ...prev]);
+                    showToast(`✅ Synced! Ref No: ${refNumber}`);
+                    
+                    setPdfData(newRecord);
                     if (userRole === 'Admin') fetchAdminRecords();
+
+                    setFormData(prev => ({
+                        empId: userRole !== 'Admin' ? loggedInUserId : '',
+                        fullName: userRole !== 'Admin' ? prev.fullName : '',
+                        department: userRole !== 'Admin' ? prev.department : '',
+                        email: userRole !== 'Admin' ? prev.email : '',
+                        location: '',
+                        eventType: '',
+                        beneficiaryCategory: '',
+                        contributionAmt: '',
+                        eventDate: '',
+                        beneficiaryName: '',
+                        ioNo: '',
+                        glCode: '230189',
+                        notes: ''
+                    }));
                 } catch (err) {
-                    showToast('❌ Submission Error.');
+                    showToast('❌ Error submitting data.');
                 } finally {
                     setIsSyncing(false);
                 }
+            };
+
+            const handleDirectPrint = () => {
+                const printContainer = document.getElementById('print-root');
+                const receiptElement = document.getElementById('printable-receipt');
+                
+                if (printContainer && receiptElement) {
+                    printContainer.innerHTML = receiptElement.outerHTML;
+                    window.print();
+                    printContainer.innerHTML = '';
+                }
+            };
+
+            const handleSavePDF = () => {
+                if (!pdfData) return;
+                const element = document.getElementById('printable-receipt');
+                const opt = {
+                    margin:       0.3,
+                    filename:     `Claim_Form_${pdfData.empId}_${pdfData.refNumber || pdfData.id}.pdf`,
+                    image:        { type: 'jpeg', quality: 0.98 },
+                    html2canvas:  { scale: 2, useCORS: true },
+                    jsPDF:        { unit: 'in', format: 'a4', orientation: 'portrait' }
+                };
+                html2pdf().set(opt).from(element).save();
+            };
+
+            const confirmClearRecords = () => {
+                setRecords([]);
+                localStorage.removeItem('user_private_records');
+                setShowConfirmModal(false);
+                showToast('🧹 Your local history has been cleared!');
+            };
+
+            const exportToExcel = () => {
+                if (records.length === 0) {
+                    showToast('⚠️ No records to export!');
+                    return;
+                }
+                const exportData = records.map(({ id, ...rest }) => rest);
+                const worksheet = XLSX.utils.json_to_sheet(exportData);
+                const workbook = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(workbook, worksheet, "My Submissions");
+                XLSX.writeFile(workbook, "My_Submissions_Export.xlsx");
+                showToast('📊 Exported to Excel successfully!');
             };
 
             if (!isAuthenticated) {
                 return (
                     <div className="flex items-center justify-center min-h-screen p-4">
                         <div className="bg-slate-800 border border-slate-700 rounded-2xl p-8 max-w-md w-full shadow-2xl">
-                            <h2 className="text-xl font-bold text-cyan-400 mb-4 text-center">Portal Sign In</h2>
-                            {authError && <div className="mb-4 text-rose-300 text-xs text-center">{authError}</div>}
+                            <div className="flex flex-col items-center mb-6">
+                                <img 
+                                    src="logo.png" 
+                                    alt="Logo" 
+                                    className="h-12 w-auto mb-3 object-contain rounded bg-white p-1 shadow"
+                                    onError={(e) => { e.target.style.display = 'none'; }}
+                                />
+                                <h2 className="text-xl font-bold text-cyan-400">Portal Access Required</h2>
+                                <p className="text-xs text-slate-400 mt-1">Sign in with your credentials</p>
+                            </div>
+
+                            {authError && (
+                                <div className="mb-4 bg-rose-900/40 border border-rose-500/50 text-rose-300 text-xs p-3 rounded text-center">
+                                    {authError}
+                                </div>
+                            )}
+
                             <form onSubmit={handleLogin} className="space-y-4">
-                                <input type="text" placeholder="User ID" required className="w-full bg-slate-900 border p-2 rounded text-sm text-white" value={credentials.userId} onChange={e => setCredentials(p => ({ ...p, userId: e.target.value }))} />
-                                <input type="password" placeholder="Password" required className="w-full bg-slate-900 border p-2 rounded text-sm text-white" value={credentials.password} onChange={e => setCredentials(p => ({ ...p, password: e.target.value }))} />
-                                <button type="submit" className="w-full bg-cyan-600 font-bold py-2 rounded text-sm">{isAuthenticating ? 'Signing In...' : 'Sign In'}</button>
+                                <div className="flex items-center space-x-3">
+                                    <label className="w-24 text-sm font-bold text-slate-200">User ID:</label>
+                                    <input 
+                                        type="text" 
+                                        required
+                                        value={credentials.userId}
+                                        onChange={(e) => setCredentials(p => ({ ...p, userId: e.target.value }))}
+                                        className="flex-1 bg-slate-900 border border-slate-700 rounded px-3 py-2 text-slate-100 focus:outline-none focus:border-cyan-500 text-sm"
+                                        placeholder="Enter User ID"
+                                    />
+                                </div>
+
+                                <div className="flex items-center space-x-3">
+                                    <label className="w-24 text-sm font-bold text-slate-200">Password:</label>
+                                    <input 
+                                        type="password" 
+                                        required
+                                        value={credentials.password}
+                                        onChange={(e) => setCredentials(p => ({ ...p, password: e.target.value }))}
+                                        className="flex-1 bg-slate-900 border border-slate-700 rounded px-3 py-2 text-slate-100 focus:outline-none focus:border-cyan-500 text-sm"
+                                        placeholder="Enter Password"
+                                    />
+                                </div>
+
+                                <button 
+                                    type="submit"
+                                    disabled={isAuthenticating}
+                                    className="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-2.5 rounded transition-all shadow-lg disabled:opacity-50 text-sm mt-4"
+                                >
+                                    {isAuthenticating ? 'Verifying Credentials...' : 'Sign In'}
+                                </button>
                             </form>
                         </div>
                     </div>
@@ -235,51 +615,639 @@
             }
 
             return (
-                <div className="max-w-6xl mx-auto p-6">
-                    <div className="flex justify-between items-center mb-6 flex-wrap gap-4">
-                        <h1 className="text-xl font-bold text-cyan-400 uppercase">Sales Promotion Claim Portal ({userRole})</h1>
-                        <button onClick={handleLogout} className="bg-slate-700 text-xs px-3 py-2 rounded">Logout</button>
+                <div className="max-w-4xl mx-auto p-6">
+                    {/* TOP HEADER SECTION */}
+                    <div className="flex justify-between items-center mb-8 no-print flex-wrap gap-4">
+                        <div className="relative group">
+                            <div className="absolute -inset-1 bg-gradient-to-r from-cyan-500 via-teal-400 to-blue-600 rounded-2xl blur-md opacity-70 group-hover:opacity-100 transition duration-500"></div>
+                            
+                            <div className="relative px-5 py-3 bg-slate-950/90 backdrop-blur-xl border border-cyan-500/50 rounded-2xl shadow-2xl flex items-center space-x-3">
+                                <div className="p-2 bg-cyan-500/20 text-cyan-300 rounded-xl border border-cyan-400/30 shadow-inner">
+                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <h1 className="text-xl sm:text-2xl font-black tracking-tight bg-gradient-to-r from-cyan-300 via-teal-200 to-blue-400 bg-clip-text text-transparent uppercase">
+                                        Sales Promotion Claim
+                                    </h1>
+                                    <div className="flex items-center space-x-2 mt-0.5">
+                                        <span className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-pulse"></span>
+                                        <p className="text-[10px] font-bold tracking-widest text-cyan-400/80 uppercase">
+                                            Role: <span className="text-amber-300">{userRole}</span> ({loggedInUserId})
+                                            {loggedInUserName && (
+                                                <span className="text-emerald-300"> - "{getFirstName(loggedInUserName)}"</span>
+                                            )}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center space-x-3">
+                            {records.length > 0 && (
+                                <button 
+                                    type="button"
+                                    onClick={() => setShowConfirmModal(true)}
+                                    className="bg-rose-600 hover:bg-rose-500 text-xs font-semibold px-3 py-2 rounded transition-all text-white shadow"
+                                >
+                                    🗑️ Clear My History
+                                </button>
+                            )}
+                            <button 
+                                type="button"
+                                onClick={exportToExcel}
+                                className="bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold px-4 py-2 rounded transition-all text-white shadow"
+                            >
+                                📊 Export Excel
+                            </button>
+                            <button 
+                                type="button"
+                                onClick={handleLogout}
+                                className="bg-slate-700 hover:bg-slate-600 text-xs font-semibold px-3 py-2 rounded transition-all text-slate-200 border border-slate-600 shadow"
+                            >
+                                🚪 Logout
+                            </button>
+                            <img 
+                                src="logo.png" 
+                                alt="Logo" 
+                                className="h-10 w-auto object-contain rounded bg-white p-1 shadow"
+                                onError={(e) => { e.target.style.display = 'none'; }}
+                            />
+                        </div>
                     </div>
 
-                    {toast && <div className="fixed top-5 right-5 bg-slate-800 border border-cyan-500 px-4 py-2 rounded text-sm z-50">{toast}</div>}
+                    {toast && (
+                        <div className="fixed top-5 right-5 bg-slate-800 border border-cyan-500 text-slate-100 px-4 py-3 rounded shadow-2xl z-50 animate-bounce text-sm no-print">
+                            {toast}
+                        </div>
+                    )}
 
-                    {/* ADMIN VIEW ALL SHEET DATA */}
+                    {/* ADMIN VIEW ALL GOOGLE SHEET RECORDS */}
                     {userRole === 'Admin' && (
-                        <div className="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-xl mb-8">
+                        <div className="bg-slate-800 p-6 rounded-xl border border-amber-500/40 shadow-xl mb-8 no-print">
                             <div className="flex justify-between items-center mb-4">
-                                <h2 className="text-lg font-bold text-amber-300">Admin Validation Dashboard (Google Sheet "Data")</h2>
-                                <button onClick={fetchAdminRecords} className="bg-cyan-600 text-xs font-bold px-3 py-1.5 rounded">{isSyncing ? 'Refreshing...' : '🔄 Refresh Sheet Data'}</button>
+                                <h2 className="text-lg font-bold text-amber-300 flex items-center space-x-2">
+                                    <span>👑 Admin Validation Dashboard</span>
+                                    <span className="text-xs font-normal text-slate-400">(Live Google Sheet Data)</span>
+                                </h2>
+                                <button 
+                                    onClick={fetchAdminRecords} 
+                                    className="bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold px-3 py-1.5 rounded transition-all shadow"
+                                >
+                                    {isSyncing ? 'Refreshing...' : '🔄 Refresh Sheet Data'}
+                                </button>
                             </div>
 
                             <div className="overflow-x-auto">
                                 <table className="w-full text-xs text-left text-slate-300">
-                                    <thead className="bg-slate-900 uppercase font-bold text-cyan-400">
+                                    <thead className="text-[11px] uppercase bg-slate-900 text-cyan-400 font-bold">
                                         <tr>
-                                            <th className="p-2">Row</th>
-                                            <th className="p-2">EMP ID</th>
-                                            <th className="p-2">Name</th>
-                                            <th className="p-2">Event Date</th>
-                                            <th className="p-2">Amt</th>
-                                            <th className="p-2">GL Code</th>
-                                            <th className="p-2">IO No</th>
-                                            <th className="p-2">SAP Status</th>
-                                            <th className="p-2 text-center">Actions</th>
+                                            <th className="px-3 py-2">Row</th>
+                                            <th className="px-3 py-2">EMP ID</th>
+                                            <th className="px-3 py-2">Name</th>
+                                            <th className="px-3 py-2">Event Date</th>
+                                            <th className="px-3 py-2">Amt</th>
+                                            <th className="px-3 py-2">GL Code</th>
+                                            <th className="px-3 py-2">IO No</th>
+                                            <th className="px-3 py-2">SAP Status</th>
+                                            <th className="px-3 py-2 text-center">Actions</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-700">
-                                        {allAdminRecords.map((rec) => (
-                                            <tr key={rec.rowIndex} className="hover:bg-slate-750">
-                                                <td className="p-2 font-mono">{rec.rowIndex}</td>
-                                                <td className="p-2 font-mono text-cyan-300">{rec.empId}</td>
-                                                <td className="p-2">{rec.fullName}</td>
-                                                <td className="p-2">{rec.eventDate}</td>
-                                                <td className="p-2 font-bold">{rec.contributionAmt}</td>
-                                                <td className="p-2 font-mono">{rec.glCode}</td>
-                                                <td className="p-2 font-mono">{rec.ioNo || '-'}</td>
-                                                <td className="p-2 font-semibold text-emerald-400">{rec.sapStatus || 'Pending'}</td>
-                                                <td className="p-2 text-center space-x-1">
-                                                    <button onClick={() => handleAdminUpdate({ rowIndex: rec.rowIndex, sapStatus: 'Validated by Admin' })} className="bg-emerald-700 px-2 py-1 rounded text-[10px]">Validate</button>
-                                                    <button onClick={() => handleAdminDelete(rec.rowIndex)} className="bg-rose-700 px-2 py-1 rounded text-[10px]">Delete</button>
+                                        {allAdminRecords.length === 0 ? (
+                                            <tr>
+                                                <td colSpan="9" className="text-center py-4 text-slate-400 italic">No submissions found in Google Sheet.</td>
+                                            </tr>
+                                        ) : (
+                                            allAdminRecords.map((rec) => (
+                                                <tr key={rec.rowIndex} className="hover:bg-slate-750">
+                                                    <td className="px-3 py-2 font-mono text-slate-400">{rec.rowIndex}</td>
+                                                    <td className="px-3 py-2 font-mono text-cyan-300 font-bold">{rec.empId}</td>
+                                                    <td className="px-3 py-2 font-medium text-white">{rec.fullName}</td>
+                                                    <td className="px-3 py-2 font-mono">{rec.eventDate}</td>
+                                                    <td className="px-3 py-2 font-bold text-amber-300">₹{rec.contributionAmt}</td>
+                                                    <td className="px-3 py-2 font-mono">{rec.glCode}</td>
+                                                    <td className="px-3 py-2 font-mono">{rec.ioNo || '-'}</td>
+                                                    <td className="px-3 py-2 font-semibold text-emerald-400">{rec.sapStatus || 'Pending'}</td>
+                                                    <td className="px-3 py-2 text-center space-x-1">
+                                                        <button 
+                                                            onClick={() => handleAdminUpdate({ rowIndex: rec.rowIndex, sapStatus: 'Validated by Admin' })} 
+                                                            className="bg-emerald-700 hover:bg-emerald-600 text-white px-2 py-1 rounded text-[10px] font-bold shadow"
+                                                        >
+                                                            Validate
+                                                        </button>
+                                                        <button 
+                                                            onClick={() => handleAdminDelete(rec.rowIndex)} 
+                                                            className="bg-rose-700 hover:bg-rose-600 text-white px-2 py-1 rounded text-[10px] font-bold shadow"
+                                                        >
+                                                            Delete
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            ))
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* MODAL 1: CONFIRM CLEAR LOCAL HISTORY */}
+                    {showConfirmModal && (
+                        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 no-print">
+                            <div className="bg-slate-800 border border-slate-700 rounded-xl p-6 max-w-sm w-full shadow-2xl space-y-4">
+                                <div className="flex items-center space-x-3">
+                                    <div className="p-2 bg-rose-500/20 text-rose-400 rounded-lg">
+                                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                                        </svg>
+                                    </div>
+                                    <h3 className="text-lg font-bold text-white">Clear Local History?</h3>
+                                </div>
+                                <p className="text-sm text-slate-300">This will clear your local view.</p>
+                                <div className="flex justify-end space-x-3 pt-2">
+                                    <button 
+                                        type="button"
+                                        onClick={() => setShowConfirmModal(false)}
+                                        className="px-4 py-2 rounded text-xs font-semibold bg-slate-700 hover:bg-slate-600 text-slate-200 transition-all"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button 
+                                        type="button"
+                                        onClick={confirmClearRecords}
+                                        className="px-4 py-2 rounded text-xs font-semibold bg-rose-600 hover:bg-rose-500 text-white transition-all shadow"
+                                    >
+                                        Yes, Clear
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* MODAL 2: SAME DATE ATTENDANCE WARNING */}
+                    {sameDateWarningModal && (
+                        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 no-print">
+                            <div className="bg-slate-800 border border-amber-500/60 rounded-xl p-6 max-w-md w-full shadow-2xl space-y-4">
+                                <div className="flex items-center space-x-3">
+                                    <div className="p-2 bg-amber-500/20 text-amber-400 rounded-lg">
+                                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                                        </svg>
+                                    </div>
+                                    <h3 className="text-lg font-bold text-white">Event Attendance Confirmation</h3>
+                                </div>
+                                
+                                <p className="text-sm text-slate-200 font-medium">
+                                    Have you attended more than one event on same date?
+                                </p>
+                                <p className="text-xs text-slate-400">
+                                    An earlier submission exists for EMP ID <span className="text-cyan-400 font-mono font-bold">{formData.empId}</span> on date <span className="text-cyan-400 font-mono font-bold">{formData.eventDate}</span>.
+                                </p>
+
+                                <div className="flex justify-end space-x-3 pt-3">
+                                    <button 
+                                        type="button"
+                                        onClick={() => setSameDateWarningModal(false)}
+                                        className="px-4 py-2 rounded text-xs font-semibold bg-slate-700 hover:bg-slate-600 text-slate-200 transition-all"
+                                    >
+                                        No (Cancel)
+                                    </button>
+                                    <button 
+                                        type="button"
+                                        onClick={executeSubmission}
+                                        className="px-4 py-2 rounded text-xs font-semibold bg-cyan-600 hover:bg-cyan-500 text-white transition-all shadow"
+                                    >
+                                        Yes (Submit Data)
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* MODAL 3: RECEIPT PREVIEW MODAL */}
+                    {pdfData && (
+                        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto no-print">
+                            <div className="bg-slate-800 border border-slate-700 rounded-xl max-w-2xl w-full p-6 shadow-2xl flex flex-col my-auto">
+                                
+                                <div className="flex justify-between items-center border-b border-slate-700 pb-3 mb-4 shrink-0">
+                                    <h3 className="text-base font-bold text-cyan-400">Submission Receipt</h3>
+                                    <div className="flex items-center space-x-2">
+                                        <button 
+                                            type="button"
+                                            onClick={handleDirectPrint}
+                                            className="bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold px-3 py-1.5 rounded transition-all shadow flex items-center space-x-1"
+                                        >
+                                            <span>🖨️</span>
+                                            <span>Print</span>
+                                        </button>
+                                        <button 
+                                            type="button"
+                                            onClick={handleSavePDF}
+                                            className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3 py-1.5 rounded transition-all shadow flex items-center space-x-1"
+                                        >
+                                            <span>📥</span>
+                                            <span>Save PDF</span>
+                                        </button>
+                                        <button 
+                                            type="button"
+                                            onClick={() => setPdfData(null)}
+                                            className="bg-rose-700 hover:bg-rose-600 text-white text-xs font-bold px-3 py-1.5 rounded transition-all shadow flex items-center space-x-1"
+                                        >
+                                            <span>❌</span>
+                                            <span>Close</span>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div className="overflow-y-auto max-h-[75vh] pr-1">
+                                    <div id="printable-receipt" style={{ backgroundColor: '#ffffff', color: '#1e293b', padding: '32px', fontFamily: 'Arial, sans-serif', fontSize: '13px', borderRadius: '8px' }}>
+                                        
+                                        {/* Header */}
+                                        <table style={{ width: '100%', borderBottom: '2px solid #0284c7', paddingBottom: '12px', marginBottom: '24px' }}>
+                                            <tbody>
+                                                <tr>
+                                                    <td style={{ verticalAlign: 'top' }}>
+                                                        <h2 style={{ fontSize: '16px', fontWeight: 'bold', color: '#0f172a', margin: 0, letterSpacing: '0.2px' }}>
+                                                            SALES PROMOTION CLAIM SUBMISSION FORM
+                                                        </h2>
+                                                        <p style={{ fontSize: '11px', color: '#64748b', marginTop: '4px', margin: 0 }}>Submitted On: {pdfData.timestamp}</p>
+                                                    </td>
+                                                    <td style={{ textAlign: 'right', verticalAlign: 'top' }}>
+                                                        <p style={{ fontSize: '15px', fontWeight: 'bold', color: '#0284c7', margin: 0, fontFamily: 'monospace' }}>
+                                                            REF NO: {pdfData.refNumber || `#${pdfData.id}`}
+                                                        </p>
+                                                    </td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+
+                                        {/* Data Fields */}
+                                        <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '24px' }}>
+                                            <tbody>
+                                                <tr>
+                                                    <td style={{ width: '50%', padding: '10px 6px', borderBottom: '1px solid #e2e8f0' }}>
+                                                        <strong style={{ color: '#475569' }}>EMP ID:</strong> <span style={{ color: '#0f172a', fontWeight: 'bold' }}>{pdfData.empId}</span>
+                                                    </td>
+                                                    <td style={{ width: '50%', padding: '10px 6px', borderBottom: '1px solid #e2e8f0' }}>
+                                                        <strong style={{ color: '#475569' }}>Full Name:</strong> <span style={{ color: '#0f172a', fontWeight: 'bold' }}>{pdfData.fullName}</span>
+                                                    </td>
+                                                </tr>
+                                                <tr>
+                                                    <td style={{ padding: '10px 6px', borderBottom: '1px solid #e2e8f0' }}>
+                                                        <strong style={{ color: '#475569' }}>Department:</strong> {pdfData.department || '-'}
+                                                    </td>
+                                                    <td style={{ padding: '10px 6px', borderBottom: '1px solid #e2e8f0' }}>
+                                                        <strong style={{ color: '#475569' }}>Email:</strong> {pdfData.email}
+                                                    </td>
+                                                </tr>
+                                                <tr>
+                                                    <td style={{ padding: '10px 6px', borderBottom: '1px solid #e2e8f0' }}>
+                                                        <strong style={{ color: '#475569' }}>Location:</strong> {pdfData.location || '-'}
+                                                    </td>
+                                                    <td style={{ padding: '10px 6px', borderBottom: '1px solid #e2e8f0' }}>
+                                                        <strong style={{ color: '#475569' }}>Event Type:</strong> {pdfData.eventType || '-'}
+                                                    </td>
+                                                </tr>
+                                                <tr>
+                                                    <td style={{ padding: '10px 6px', borderBottom: '1px solid #e2e8f0' }}>
+                                                        <strong style={{ color: '#475569' }}>Beneficiary Category:</strong> {pdfData.beneficiaryCategory || '-'}
+                                                    </td>
+                                                    <td style={{ padding: '10px 6px', borderBottom: '1px solid #e2e8f0' }}>
+                                                        <strong style={{ color: '#475569' }}>Contribution Amt:</strong> {pdfData.contributionAmt ? `₹${pdfData.contributionAmt}` : '-'}
+                                                    </td>
+                                                </tr>
+                                                <tr>
+                                                    <td style={{ padding: '10px 6px', borderBottom: '1px solid #e2e8f0' }}>
+                                                        <strong style={{ color: '#475569' }}>Event Date:</strong> {pdfData.eventDate || '-'}
+                                                    </td>
+                                                    <td style={{ padding: '10px 6px', borderBottom: '1px solid #e2e8f0' }}>
+                                                        <strong style={{ color: '#475569' }}>Beneficiary Name:</strong> {pdfData.beneficiaryName || '-'}
+                                                    </td>
+                                                </tr>
+                                                <tr>
+                                                    <td style={{ padding: '10px 6px', borderBottom: '1px solid #e2e8f0' }}>
+                                                        <strong style={{ color: '#475569' }}>IO No:</strong> {pdfData.ioNo || '-'}
+                                                    </td>
+                                                    <td style={{ padding: '10px 6px', borderBottom: '1px solid #e2e8f0' }}>
+                                                        <strong style={{ color: '#475569' }}>GL Code:</strong> {pdfData.glCode || '230189'}
+                                                    </td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+
+                                        {/* Notes Section */}
+                                        <div style={{ backgroundColor: '#f8fafc', padding: '12px 14px', border: '1px solid #cbd5e1', borderRadius: '6px', marginBottom: '20px' }}>
+                                            <strong style={{ color: '#334155' }}>Notes:</strong> <span style={{ color: '#0f172a' }}>{pdfData.notes ? pdfData.notes : '-'}</span>
+                                        </div>
+
+                                        {/* Declaration Box */}
+                                        <div style={{ border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', padding: '14px 16px', borderRadius: '6px', marginBottom: '24px' }}>
+                                            <h4 style={{ fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase', color: '#1e293b', margin: '0 0 4px 0' }}>Declaration</h4>
+                                            <p style={{ fontSize: '11px', color: '#334155', fontStyle: 'italic', margin: 0, lineHeight: '1.5' }}>
+                                                I hereby declare that this event claim has not been claimed previously...
+                                            </p>
+                                        </div>
+
+                                        {/* SAP Document No line */}
+                                        <div style={{ marginTop: '40px', marginBottom: '30px', paddingLeft: '4px' }}>
+                                            <p style={{ fontSize: '12px', fontWeight: 'bold', color: '#334155', margin: 0 }}>
+                                                SAP Document No: <span style={{ borderBottom: '1px solid #94a3b8', display: 'inline-block', width: '220px', marginLeft: '8px' }}>&nbsp;</span>
+                                            </p>
+                                        </div>
+
+                                        {/* Signatures */}
+                                        <div style={{ paddingTop: '30px', paddingBottom: '10px' }}>
+                                            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                                <tbody>
+                                                    <tr>
+                                                        <td style={{ width: '45%', textAlign: 'center', verticalAlign: 'bottom' }}>
+                                                            <div style={{ height: '1px', backgroundColor: '#475569', width: '100%', marginBottom: '8px' }}></div>
+                                                            <p style={{ margin: '0', fontWeight: 'bold', color: '#0f172a', fontSize: '12px' }}>User Signature</p>
+                                                            <p style={{ margin: '4px 0 0 0', color: '#64748b', fontSize: '11px' }}>({pdfData.fullName})</p>
+                                                        </td>
+                                                        <td style={{ width: '10%' }}></td>
+                                                        <td style={{ width: '45%', textAlign: 'center', verticalAlign: 'bottom' }}>
+                                                            <div style={{ height: '1px', backgroundColor: '#475569', width: '100%', marginBottom: '8px' }}></div>
+                                                            <p style={{ margin: '0', fontWeight: 'bold', color: '#0f172a', fontSize: '12px' }}>Manager Signature</p>
+                                                            <p style={{ margin: '4px 0 0 0', color: '#64748b', fontSize: '11px' }}>(Verification & Approval)</p>
+                                                        </td>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
+
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* FORM CONTAINER */}
+                    <div className="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-xl mb-8 no-print">
+                        <form onSubmit={handleSubmit} className="space-y-4">
+                            
+                            {/* TOP HEADER ROW */}
+                            <div className="flex items-center justify-between pb-1">
+                                <button 
+                                    type="button"
+                                    onClick={handleFetchData}
+                                    disabled={isFetchingEmp}
+                                    className="bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold px-3 py-1.5 rounded transition-all shadow flex items-center space-x-1.5 disabled:opacity-50"
+                                >
+                                    <span>🔍</span>
+                                    <span>{isFetchingEmp ? 'Fetching Data...' : 'Fetch Data'}</span>
+                                </button>
+
+                                <p className="text-[11px] text-amber-400 font-medium italic whitespace-nowrap text-right pl-2">
+                                    # Data will be captured from server, In case not updated then update it.
+                                </p>
+                            </div>
+
+                            {/* ROW 1 */}
+                            <div className="flex flex-wrap items-center gap-3">
+                                <div className="w-full sm:w-36">
+                                    <label className="block text-sm font-bold text-slate-200 mb-1">
+                                        EMP ID * {userRole !== 'Admin' && <span className="text-xs text-amber-400 font-normal">(Locked)</span>}
+                                    </label>
+                                    <input 
+                                        type="text" 
+                                        name="empId" 
+                                        value={formData.empId} 
+                                        onChange={handleEmpIdChange}
+                                        maxLength={9}
+                                        inputMode="numeric"
+                                        placeholder="e.g. 123456789"
+                                        required
+                                        disabled={userRole !== 'Admin'}
+                                        className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-slate-100 focus:outline-none focus:border-cyan-500 tracking-wider font-mono text-sm disabled:bg-slate-800 disabled:text-slate-400 disabled:cursor-not-allowed"
+                                    />
+                                </div>
+
+                                <div className="w-full sm:flex-1 min-w-[170px]">
+                                    <label className="block text-sm font-bold text-slate-200 mb-1">Full Name #</label>
+                                    <input 
+                                        type="text" 
+                                        name="fullName" 
+                                        value={formData.fullName} 
+                                        onChange={handleChange} 
+                                        required
+                                        className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-slate-100 focus:outline-none focus:border-cyan-500 text-sm"
+                                    />
+                                </div>
+
+                                <div className="w-full sm:flex-1 min-w-[160px]">
+                                    <label className="block text-sm font-bold text-slate-200 mb-1">Department #</label>
+                                    <input 
+                                        type="text" 
+                                        name="department" 
+                                        value={formData.department} 
+                                        onChange={handleChange} 
+                                        placeholder="e.g. Engineering"
+                                        className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-slate-100 focus:outline-none focus:border-cyan-500 text-sm"
+                                    />
+                                </div>
+
+                                <div className="w-full sm:flex-[1.2] min-w-[210px]">
+                                    <label className="block text-sm font-bold text-slate-200 mb-1">Email Address #</label>
+                                    <input 
+                                        type="email" 
+                                        name="email" 
+                                        value={formData.email} 
+                                        onChange={handleChange} 
+                                        required
+                                        className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-slate-100 focus:outline-none focus:border-cyan-500 text-sm"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* ROW 2 - DYNAMIC DROPDOWNS FROM SHEET "Input" */}
+                            <div className="flex flex-wrap items-center gap-3 pt-1">
+                                <div className="w-full sm:flex-1 min-w-[180px]">
+                                    <label className="block text-sm font-bold text-slate-200 mb-1">Location</label>
+                                    <select 
+                                        name="location" 
+                                        value={formData.location} 
+                                        onChange={handleChange} 
+                                        disabled={isLoadingOptions}
+                                        className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-slate-100 focus:outline-none focus:border-cyan-500 text-sm disabled:opacity-50"
+                                    >
+                                        <option value="">Select Location</option>
+                                        {locations.map((item, idx) => (
+                                            <option key={idx} value={item}>{item}</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div className="w-full sm:flex-1 min-w-[180px]">
+                                    <label className="block text-sm font-bold text-slate-200 mb-1">Event Type</label>
+                                    <select 
+                                        name="eventType" 
+                                        value={formData.eventType} 
+                                        onChange={handleChange} 
+                                        disabled={isLoadingOptions}
+                                        className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-slate-100 focus:outline-none focus:border-cyan-500 text-sm disabled:opacity-50"
+                                    >
+                                        <option value="">Select Event Type</option>
+                                        {eventTypes.map((item, idx) => (
+                                            <option key={idx} value={item}>{item}</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div className="w-full sm:flex-1 min-w-[180px]">
+                                    <label className="block text-sm font-bold text-slate-200 mb-1">Beneficiary Category</label>
+                                    <select 
+                                        name="beneficiaryCategory" 
+                                        value={formData.beneficiaryCategory} 
+                                        onChange={handleChange} 
+                                        disabled={isLoadingOptions}
+                                        className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-slate-100 focus:outline-none focus:border-cyan-500 text-sm disabled:opacity-50"
+                                    >
+                                        <option value="">Select Category</option>
+                                        {beneficiaryCategories.map((item, idx) => (
+                                            <option key={idx} value={item}>{item}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+
+                            {/* ROW 3 */}
+                            <div className="flex flex-wrap items-center gap-3 pt-1">
+                                <div className="w-full sm:flex-1 min-w-[180px]">
+                                    <label className="block text-sm font-bold text-slate-200 mb-1">Contribution Amt</label>
+                                    <input 
+                                        type="number" 
+                                        name="contributionAmt" 
+                                        value={formData.contributionAmt} 
+                                        onChange={handleChange} 
+                                        placeholder="e.g. 5000"
+                                        className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-slate-100 focus:outline-none focus:border-cyan-500 text-sm"
+                                    />
+                                </div>
+
+                                <div className="w-full sm:flex-1 min-w-[180px]">
+                                    <label className="block text-sm font-bold text-slate-200 mb-1">Event Date (DD.MM.YY) *</label>
+                                    <input 
+                                        type="text" 
+                                        name="eventDate" 
+                                        value={formData.eventDate} 
+                                        onChange={handleEventDateChange} 
+                                        placeholder="12.05.26"
+                                        maxLength={8}
+                                        required
+                                        className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-slate-100 focus:outline-none focus:border-cyan-500 text-sm font-mono tracking-wider"
+                                    />
+                                </div>
+
+                                <div className="w-full sm:flex-1 min-w-[180px]">
+                                    <label className="block text-sm font-bold text-slate-200 mb-1">Beneficiary Name</label>
+                                    <input 
+                                        type="text" 
+                                        name="beneficiaryName" 
+                                        value={formData.beneficiaryName} 
+                                        onChange={handleChange} 
+                                        placeholder="Enter Name"
+                                        className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-slate-100 focus:outline-none focus:border-cyan-500 text-sm"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* ROW 4 */}
+                            <div className="flex flex-wrap items-center gap-3 pt-1">
+                                <div className="w-full sm:flex-1 min-w-[180px]">
+                                    <label className="block text-sm font-bold text-slate-200 mb-1">IO No</label>
+                                    <input 
+                                        type="text" 
+                                        name="ioNo" 
+                                        value={formData.ioNo} 
+                                        onChange={handleChange} 
+                                        placeholder="Optional IO No"
+                                        className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-slate-100 focus:outline-none focus:border-cyan-500 text-sm"
+                                    />
+                                </div>
+
+                                <div className="w-full sm:flex-1 min-w-[180px]">
+                                    <label className="block text-sm font-bold text-slate-200 mb-1">GL Code</label>
+                                    <input 
+                                        type="text" 
+                                        name="glCode" 
+                                        value={formData.glCode} 
+                                        onChange={handleGlCodeChange} 
+                                        className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-slate-100 focus:outline-none focus:border-cyan-500 text-sm font-mono"
+                                    />
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-bold text-slate-200 mb-1">Notes</label>
+                                <textarea name="notes" value={formData.notes} onChange={handleChange} className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-slate-100 focus:outline-none focus:border-cyan-500 text-sm" rows="2"></textarea>
+                            </div>
+
+                            <button 
+                                type="submit" 
+                                disabled={isSyncing}
+                                className="w-full bg-cyan-600 hover:bg-cyan-500 font-bold py-2.5 rounded transition-all text-white shadow-lg disabled:opacity-50 text-sm mt-2"
+                            >
+                                {isSyncing ? 'Syncing to Sheet...' : 'Submit & Sync Data'}
+                            </button>
+                        </form>
+                    </div>
+
+                    {/* SUBMITTED RECORDS TABLE */}
+                    {records.length > 0 && (
+                        <div className="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-xl no-print">
+                            <div className="flex justify-between items-center mb-4">
+                                <h2 className="text-lg font-bold text-slate-200">My Submitted Records</h2>
+                                <span className="text-xs text-slate-400">Private to your browser</span>
+                            </div>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm text-left text-slate-300">
+                                    <thead className="text-xs uppercase bg-slate-900 text-slate-400 font-bold">
+                                        <tr>
+                                            <th className="px-4 py-3">Ref No</th>
+                                            <th className="px-4 py-3">Timestamp</th>
+                                            <th className="px-4 py-3">EMP ID</th>
+                                            <th className="px-4 py-3">Name</th>
+                                            <th className="px-4 py-3">Department</th>
+                                            <th className="px-4 py-3">Email</th>
+                                            <th className="px-4 py-3">Location</th>
+                                            <th className="px-4 py-3">Event Type</th>
+                                            <th className="px-4 py-3">Category</th>
+                                            <th className="px-4 py-3">Amt</th>
+                                            <th className="px-4 py-3">Date</th>
+                                            <th className="px-4 py-3">Beneficiary</th>
+                                            <th className="px-4 py-3">IO No</th>
+                                            <th className="px-4 py-3">GL Code</th>
+                                            <th className="px-4 py-3 text-center">Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-700">
+                                        {records.map((rec) => (
+                                            <tr key={rec.id} className="hover:bg-slate-750">
+                                                <td className="px-4 py-3 font-semibold text-cyan-400 font-mono">{rec.refNumber || '-'}</td>
+                                                <td className="px-4 py-3 text-xs text-slate-400">{rec.timestamp}</td>
+                                                <td className="px-4 py-3 font-semibold text-cyan-400 font-mono">{rec.empId}</td>
+                                                <td className="px-4 py-3 font-medium text-white">{rec.fullName}</td>
+                                                <td className="px-4 py-3">{rec.department}</td>
+                                                <td className="px-4 py-3">{rec.email}</td>
+                                                <td className="px-4 py-3">{rec.location || '-'}</td>
+                                                <td className="px-4 py-3">{rec.eventType || '-'}</td>
+                                                <td className="px-4 py-3">{rec.beneficiaryCategory || '-'}</td>
+                                                <td className="px-4 py-3 font-mono">{rec.contributionAmt || '-'}</td>
+                                                <td className="px-4 py-3 font-mono text-xs">{rec.eventDate || '-'}</td>
+                                                <td className="px-4 py-3">{rec.beneficiaryName || '-'}</td>
+                                                <td className="px-4 py-3">{rec.ioNo || '-'}</td>
+                                                <td className="px-4 py-3 font-mono">{rec.glCode || '230189'}</td>
+                                                <td className="px-4 py-3 text-center">
+                                                    <button 
+                                                        type="button"
+                                                        onClick={() => setPdfData(rec)}
+                                                        className="bg-cyan-900/60 hover:bg-cyan-800 text-cyan-300 text-xs font-semibold px-2.5 py-1 rounded border border-cyan-700/60 transition-all shadow"
+                                                    >
+                                                        📄 PDF
+                                                    </button>
                                                 </td>
                                             </tr>
                                         ))}
@@ -288,44 +1256,6 @@
                             </div>
                         </div>
                     )}
-
-                    {/* CLAIM SUBMISSION FORM */}
-                    <div className="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-xl">
-                        <h2 className="text-md font-bold text-slate-200 mb-4">New Claim Entry</h2>
-                        <form onSubmit={handleSubmit} className="space-y-4">
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                                <div>
-                                    <label className="text-xs text-slate-300 font-bold">EMP ID</label>
-                                    <input type="text" value={formData.empId} onChange={e => setFormData(p => ({ ...p, empId: e.target.value }))} required className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-white" />
-                                </div>
-                                <div>
-                                    <label className="text-xs text-slate-300 font-bold">Full Name</label>
-                                    <input type="text" value={formData.fullName} onChange={e => setFormData(p => ({ ...p, fullName: e.target.value }))} required className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-white" />
-                                </div>
-                                <div>
-                                    <label className="text-xs text-slate-300 font-bold">Email</label>
-                                    <input type="email" value={formData.email} onChange={e => setFormData(p => ({ ...p, email: e.target.value }))} required className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-white" />
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                                <div>
-                                    <label className="text-xs text-slate-300 font-bold">Event Date (DD.MM.YY)</label>
-                                    <input type="text" value={formData.eventDate} onChange={e => setFormData(p => ({ ...p, eventDate: e.target.value }))} placeholder="12.05.26" required className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-white font-mono" />
-                                </div>
-                                <div>
-                                    <label className="text-xs text-slate-300 font-bold">Contribution Amount</label>
-                                    <input type="number" value={formData.contributionAmt} onChange={e => setFormData(p => ({ ...p, contributionAmt: e.target.value }))} required className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-white" />
-                                </div>
-                                <div>
-                                    <label className="text-xs text-slate-300 font-bold">GL Code</label>
-                                    <input type="text" value={formData.glCode} onChange={e => setFormData(p => ({ ...p, glCode: e.target.value }))} className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-white font-mono" />
-                                </div>
-                            </div>
-
-                            <button type="submit" disabled={isSyncing} className="w-full bg-cyan-600 font-bold py-2.5 rounded text-sm">{isSyncing ? 'Syncing Data...' : 'Submit Claim'}</button>
-                        </form>
-                    </div>
                 </div>
             );
         }
