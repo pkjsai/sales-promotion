@@ -111,7 +111,6 @@
                     if (saved) {
                         try { 
                             let parsed = JSON.parse(saved);
-                            // Auto-trim to max 12 records for Normal users
                             if (userRole !== 'Admin' && parsed.length > 12) {
                                 parsed = parsed.slice(0, 12);
                             }
@@ -214,14 +213,21 @@
                 setFormData(prev => ({ ...prev, eventDate: val }));
             };
 
-            const generateRefNumber = (empIdVal, eventDateVal, existingRecords) => {
-                const baseFormattedDate = cleanDDMMYY(eventDateVal);
-                const duplicateCount = existingRecords.filter(rec => 
-                    rec.empId === empIdVal &&
-                    cleanDDMMYY(rec.eventDate) === baseFormattedDate
-                ).length;
+            // REVISED REF NO GENERATOR
+            // Format: [EMP ID][DDMMYY]-[Seq Number] -> e.g. 212504101026-01
+            const generateRefNumber = (empIdVal, eventDateVal, localRecords, adminRecords) => {
+                const formattedDate = cleanDDMMYY(eventDateVal);
+                const sourceList = userRole === 'Admin' && adminRecords.length > 0 ? adminRecords : localRecords;
 
-                return duplicateCount === 0 ? baseFormattedDate : `${baseFormattedDate}-${duplicateCount}`;
+                const matchingEntries = sourceList.filter(rec => 
+                    String(rec.empId || '').trim() === String(empIdVal || '').trim() &&
+                    cleanDDMMYY(rec.eventDate) === formattedDate
+                );
+
+                const sequenceNum = matchingEntries.length + 1;
+                const formattedSeq = sequenceNum < 10 ? `0${sequenceNum}` : `${sequenceNum}`;
+
+                return `${empIdVal}${formattedDate}-${formattedSeq}`;
             };
 
             const jsonpRequest = (params, retries = 3) => {
@@ -446,12 +452,14 @@
                 }
 
                 if (!isValidDDMMYY(formData.eventDate)) {
-                    showToast('❌ Invalid Date Format! Please enter in DD.MM.YY format (e.g. 12.05.26)');
+                    showToast('❌ Invalid Date Format! Please enter in DD.MM.YY format (e.g. 10.10.26)');
                     return;
                 }
 
-                const isStrictDuplicate = records.some(rec => 
-                    rec.empId === formData.empId &&
+                const checkSource = userRole === 'Admin' && allAdminRecords.length > 0 ? allAdminRecords : records;
+
+                const isStrictDuplicate = checkSource.some(rec => 
+                    String(rec.empId || '').trim() === String(formData.empId || '').trim() &&
                     cleanDDMMYY(rec.eventDate) === cleanDDMMYY(formData.eventDate) &&
                     rec.beneficiaryName.trim().toLowerCase() === formData.beneficiaryName.trim().toLowerCase() &&
                     rec.beneficiaryName.trim() !== ""
@@ -462,8 +470,8 @@
                     return;
                 }
 
-                const hasSameDateEntry = records.some(rec => 
-                    rec.empId === formData.empId &&
+                const hasSameDateEntry = checkSource.some(rec => 
+                    String(rec.empId || '').trim() === String(formData.empId || '').trim() &&
                     cleanDDMMYY(rec.eventDate) === cleanDDMMYY(formData.eventDate)
                 );
 
@@ -480,7 +488,7 @@
                 setSameDateWarningModal(false);
 
                 const timestamp = new Date().toLocaleString();
-                const refNumber = generateRefNumber(formData.empId, formData.eventDate, records);
+                const refNumber = generateRefNumber(formData.empId, formData.eventDate, records, allAdminRecords);
 
                 const newRecord = { 
                     id: Date.now(), 
@@ -510,11 +518,10 @@
                         ioNo: formData.ioNo
                     });
 
-                    // AUTO-TRIM LOGIC: Maintain only the 12 most recent submissions for Normal Users
                     setRecords(prev => {
                         const updated = [newRecord, ...prev];
                         if (userRole !== 'Admin' && updated.length > 12) {
-                            return updated.slice(0, 12); // Trims oldest 13th+ row automatically from view
+                            return updated.slice(0, 12);
                         }
                         return updated;
                     });
@@ -684,7 +691,6 @@
                         </div>
 
                         <div className="flex items-center space-x-3">
-                            {/* Clear History button visible ONLY to Admin users */}
                             {userRole === 'Admin' && records.length > 0 && (
                                 <button 
                                     type="button"
@@ -1187,7 +1193,7 @@
                                         name="eventDate" 
                                         value={formData.eventDate} 
                                         onChange={handleEventDateChange} 
-                                        placeholder="12.05.26"
+                                        placeholder="10.10.26"
                                         maxLength={8}
                                         required
                                         className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-slate-100 focus:outline-none focus:border-cyan-500 text-sm font-mono tracking-wider"
