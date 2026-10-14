@@ -213,8 +213,6 @@
                 setFormData(prev => ({ ...prev, eventDate: val }));
             };
 
-            // REVISED REF NO GENERATOR
-            // Format: [EMP ID][DDMMYY]-[Seq Number] -> e.g. 212504101026-01
             const generateRefNumber = (empIdVal, eventDateVal, localRecords, adminRecords) => {
                 const formattedDate = cleanDDMMYY(eventDateVal);
                 const sourceList = userRole === 'Admin' && adminRecords.length > 0 ? adminRecords : localRecords;
@@ -982,7 +980,7 @@
                                                 </tr>
                                                 <tr>
                                                     <td style={{ padding: '10px 6px', borderBottom: '1px solid #e2e8f0' }}>
-                                                        <strong style={{ color: '#475569' }}>IO No:</strong> {pdfData.ioNo || '-'}
+                                                        <strong style={{ color: '#475569' }}>Cost Center:</strong> {pdfData.costCenter || '-'}
                                                     </td>
                                                     <td style={{ padding: '10px 6px', borderBottom: '1px solid #e2e8f0' }}>
                                                         <strong style={{ color: '#475569' }}>GL Code:</strong> {pdfData.glCode || '-'}
@@ -990,7 +988,7 @@
                                                 </tr>
                                                 <tr>
                                                     <td style={{ padding: '10px 6px', borderBottom: '1px solid #e2e8f0' }} colSpan="2">
-                                                        <strong style={{ color: '#475569' }}>Cost Center:</strong> {pdfData.costCenter || '-'}
+                                                        <strong style={{ color: '#475569' }}>IO No:</strong> {pdfData.ioNo || '-'}
                                                     </td>
                                                 </tr>
                                             </tbody>
