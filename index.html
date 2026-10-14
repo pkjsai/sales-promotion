@@ -713,11 +713,12 @@
                                     <thead className="text-[11px] uppercase bg-slate-900 text-cyan-400 font-bold">
                                         <tr>
                                             <th className="px-3 py-2">Row</th>
+                                            <th className="px-3 py-2">REF NO</th>
                                             <th className="px-3 py-2">EMP ID</th>
                                             <th className="px-3 py-2">Name</th>
-                                            <th className="px-3 py-2">Department</th>
-                                            <th className="px-3 py-2">Email</th>
+                                            <th className="px-3 py-2">Event Type</th>
                                             <th className="px-3 py-2">Event Date</th>
+                                            <th className="px-3 py-2">Beneficiary Name</th>
                                             <th className="px-3 py-2">Amt</th>
                                             <th className="px-3 py-2">GL Code</th>
                                             <th className="px-3 py-2">Cost Center</th>
@@ -729,17 +730,18 @@
                                     <tbody className="divide-y divide-slate-700">
                                         {allAdminRecords.length === 0 ? (
                                             <tr>
-                                                <td colSpan="12" className="text-center py-4 text-slate-400 italic">No submissions found in Google Sheet.</td>
+                                                <td colSpan="13" className="text-center py-4 text-slate-400 italic">No submissions found in Google Sheet.</td>
                                             </tr>
                                         ) : (
                                             allAdminRecords.map((rec) => (
                                                 <tr key={rec.rowIndex} className="hover:bg-slate-750">
                                                     <td className="px-3 py-2 font-mono text-slate-400">{rec.rowIndex}</td>
+                                                    <td className="px-3 py-2 font-mono text-cyan-400 font-bold">{rec.refNumber || '-'}</td>
                                                     <td className="px-3 py-2 font-mono text-cyan-300 font-bold">{rec.empId}</td>
                                                     <td className="px-3 py-2 font-medium text-white">{rec.fullName}</td>
-                                                    <td className="px-3 py-2">{rec.department}</td>
-                                                    <td className="px-3 py-2">{rec.email}</td>
+                                                    <td className="px-3 py-2">{rec.eventType || '-'}</td>
                                                     <td className="px-3 py-2 font-mono">{rec.eventDate}</td>
+                                                    <td className="px-3 py-2">{rec.beneficiaryName || '-'}</td>
                                                     <td className="px-3 py-2 font-bold text-amber-300">₹{rec.contributionAmt}</td>
                                                     <td className="px-3 py-2 font-mono">{rec.glCode}</td>
                                                     <td className="px-3 py-2 font-mono">{rec.costCenter || '-'}</td>
