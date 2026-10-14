@@ -53,6 +53,8 @@
             const [locations, setLocations] = useState([]);
             const [eventTypes, setEventTypes] = useState([]);
             const [beneficiaryCategories, setBeneficiaryCategories] = useState([]);
+            const [glCodes, setGlCodes] = useState([]);
+            const [costCenters, setCostCenters] = useState([]);
             const [isLoadingOptions, setIsLoadingOptions] = useState(false);
 
             // App Form States
@@ -68,7 +70,8 @@
                 eventDate: '',
                 beneficiaryName: '',
                 ioNo: '',
-                glCode: '230189',
+                glCode: '',
+                costCenter: '',
                 notes: ''
             });
 
@@ -135,6 +138,19 @@
                         setLocations(data.locations || []);
                         setEventTypes(data.eventTypes || []);
                         setBeneficiaryCategories(data.beneficiaryCategories || []);
+                        
+                        const fetchedGlCodes = data.glCodes || [];
+                        const fetchedCostCenters = data.costCenters || [];
+                        
+                        setGlCodes(fetchedGlCodes);
+                        setCostCenters(fetchedCostCenters);
+
+                        // Prefix row 2 values as default if available
+                        setFormData(prev => ({
+                            ...prev,
+                            glCode: prev.glCode || (fetchedGlCodes.length > 0 ? fetchedGlCodes[0] : ''),
+                            costCenter: prev.costCenter || (fetchedCostCenters.length > 0 ? fetchedCostCenters[0] : '')
+                        }));
                     }
                 } catch (err) {
                     console.error('Error fetching dropdown options:', err);
@@ -282,7 +298,8 @@
                             eventDate: '',
                             beneficiaryName: '',
                             ioNo: '',
-                            glCode: '230189',
+                            glCode: glCodes.length > 0 ? glCodes[0] : '',
+                            costCenter: costCenters.length > 0 ? costCenters[0] : '',
                             notes: ''
                         });
                     } else {
@@ -306,21 +323,13 @@
                 setFormData({
                     empId: '', fullName: '', department: '', email: '', location: '',
                     eventType: '', beneficiaryCategory: '', contributionAmt: '',
-                    eventDate: '', beneficiaryName: '', ioNo: '', glCode: '230189', notes: ''
+                    eventDate: '', beneficiaryName: '', ioNo: '', glCode: '', costCenter: '', notes: ''
                 });
             };
 
             const handleChange = (e) => {
                 const { name, value } = e.target;
                 setFormData(prev => ({ ...prev, [name]: value }));
-            };
-
-            const handleGlCodeChange = (e) => {
-                let val = e.target.value;
-                if (!val.startsWith('230189')) {
-                    val = '230189';
-                }
-                setFormData(prev => ({ ...prev, glCode: val }));
             };
 
             const handleEmpIdChange = (e) => {
@@ -478,6 +487,7 @@
                         refNumber: refNumber,
                         notes: formData.notes,
                         glCode: formData.glCode,
+                        costCenter: formData.costCenter,
                         ioNo: formData.ioNo
                     });
 
@@ -499,7 +509,8 @@
                         eventDate: '',
                         beneficiaryName: '',
                         ioNo: '',
-                        glCode: '230189',
+                        glCode: glCodes.length > 0 ? glCodes[0] : '',
+                        costCenter: costCenters.length > 0 ? costCenters[0] : '',
                         notes: ''
                     }));
                 } catch (err) {
@@ -709,6 +720,7 @@
                                             <th className="px-3 py-2">Event Date</th>
                                             <th className="px-3 py-2">Amt</th>
                                             <th className="px-3 py-2">GL Code</th>
+                                            <th className="px-3 py-2">Cost Center</th>
                                             <th className="px-3 py-2">IO No</th>
                                             <th className="px-3 py-2">SAP Status</th>
                                             <th className="px-3 py-2 text-center">Actions</th>
@@ -717,7 +729,7 @@
                                     <tbody className="divide-y divide-slate-700">
                                         {allAdminRecords.length === 0 ? (
                                             <tr>
-                                                <td colSpan="11" className="text-center py-4 text-slate-400 italic">No submissions found in Google Sheet.</td>
+                                                <td colSpan="12" className="text-center py-4 text-slate-400 italic">No submissions found in Google Sheet.</td>
                                             </tr>
                                         ) : (
                                             allAdminRecords.map((rec) => (
@@ -730,6 +742,7 @@
                                                     <td className="px-3 py-2 font-mono">{rec.eventDate}</td>
                                                     <td className="px-3 py-2 font-bold text-amber-300">₹{rec.contributionAmt}</td>
                                                     <td className="px-3 py-2 font-mono">{rec.glCode}</td>
+                                                    <td className="px-3 py-2 font-mono">{rec.costCenter || '-'}</td>
                                                     <td className="px-3 py-2 font-mono">{rec.ioNo || '-'}</td>
                                                     <td className="px-3 py-2 font-semibold text-emerald-400">{rec.sapStatus || 'Pending'}</td>
                                                     <td className="px-3 py-2 text-center space-x-1">
@@ -933,7 +946,12 @@
                                                         <strong style={{ color: '#475569' }}>IO No:</strong> {pdfData.ioNo || '-'}
                                                     </td>
                                                     <td style={{ padding: '10px 6px', borderBottom: '1px solid #e2e8f0' }}>
-                                                        <strong style={{ color: '#475569' }}>GL Code:</strong> {pdfData.glCode || '230189'}
+                                                        <strong style={{ color: '#475569' }}>GL Code:</strong> {pdfData.glCode || '-'}
+                                                    </td>
+                                                </tr>
+                                                <tr>
+                                                    <td style={{ padding: '10px 6px', borderBottom: '1px solid #e2e8f0' }} colSpan="2">
+                                                        <strong style={{ color: '#475569' }}>Cost Center:</strong> {pdfData.costCenter || '-'}
                                                     </td>
                                                 </tr>
                                             </tbody>
@@ -1156,7 +1174,7 @@
                                 </div>
                             </div>
 
-                            {/* ROW 4 */}
+                            {/* ROW 4 - IO NO, GL CODE, AND COST CENTER */}
                             <div className="flex flex-wrap items-center gap-3 pt-1">
                                 <div className="w-full sm:flex-1 min-w-[180px]">
                                     <label className="block text-sm font-bold text-slate-200 mb-1">IO No</label>
@@ -1172,13 +1190,34 @@
 
                                 <div className="w-full sm:flex-1 min-w-[180px]">
                                     <label className="block text-sm font-bold text-slate-200 mb-1">GL Code</label>
-                                    <input 
-                                        type="text" 
+                                    <select 
                                         name="glCode" 
                                         value={formData.glCode} 
-                                        onChange={handleGlCodeChange} 
-                                        className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-slate-100 focus:outline-none focus:border-cyan-500 text-sm font-mono"
-                                    />
+                                        onChange={handleChange} 
+                                        disabled={isLoadingOptions}
+                                        className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-slate-100 focus:outline-none focus:border-cyan-500 text-sm font-mono disabled:opacity-50"
+                                    >
+                                        <option value="">Select GL Code</option>
+                                        {glCodes.map((item, idx) => (
+                                            <option key={idx} value={item}>{item}</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div className="w-full sm:flex-1 min-w-[180px]">
+                                    <label className="block text-sm font-bold text-slate-200 mb-1">Cost Center</label>
+                                    <select 
+                                        name="costCenter" 
+                                        value={formData.costCenter} 
+                                        onChange={handleChange} 
+                                        disabled={isLoadingOptions}
+                                        className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-slate-100 focus:outline-none focus:border-cyan-500 text-sm font-mono disabled:opacity-50"
+                                    >
+                                        <option value="">Select Cost Center</option>
+                                        {costCenters.map((item, idx) => (
+                                            <option key={idx} value={item}>{item}</option>
+                                        ))}
+                                    </select>
                                 </div>
                             </div>
 
@@ -1222,6 +1261,7 @@
                                             <th className="px-4 py-3">Beneficiary</th>
                                             <th className="px-4 py-3">IO No</th>
                                             <th className="px-4 py-3">GL Code</th>
+                                            <th className="px-4 py-3">Cost Center</th>
                                             <th className="px-4 py-3 text-center">Action</th>
                                         </tr>
                                     </thead>
@@ -1241,7 +1281,8 @@
                                                 <td className="px-4 py-3 font-mono text-xs">{rec.eventDate || '-'}</td>
                                                 <td className="px-4 py-3">{rec.beneficiaryName || '-'}</td>
                                                 <td className="px-4 py-3">{rec.ioNo || '-'}</td>
-                                                <td className="px-4 py-3 font-mono">{rec.glCode || '230189'}</td>
+                                                <td className="px-4 py-3 font-mono">{rec.glCode || '-'}</td>
+                                                <td className="px-4 py-3 font-mono">{rec.costCenter || '-'}</td>
                                                 <td className="px-4 py-3 text-center">
                                                     <button 
                                                         type="button"
