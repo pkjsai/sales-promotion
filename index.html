@@ -103,7 +103,6 @@
                 }
             }, []);
 
-            // USER-SPECIFIC LOCAL STORAGE LOAD
             useEffect(() => {
                 if (isAuthenticated && loggedInUserId) {
                     const storageKey = `user_private_records_${loggedInUserId}`;
@@ -124,7 +123,6 @@
                 }
             }, [isAuthenticated, loggedInUserId, userRole]);
 
-            // USER-SPECIFIC LOCAL STORAGE SAVE
             useEffect(() => {
                 if (isAuthenticated && loggedInUserId) {
                     const storageKey = `user_private_records_${loggedInUserId}`;
@@ -136,7 +134,6 @@
                 fetchDropdownOptions();
             }, []);
 
-            // Auto-fetch employee details for normal users once authenticated
             useEffect(() => {
                 if (isAuthenticated && userRole !== 'Admin' && loggedInUserId) {
                     handleFetchDataForId(loggedInUserId);
@@ -171,7 +168,7 @@
                     }
                 } catch (err) {
                     console.error('Error fetching dropdown options:', err);
-                } finally {
+                } fontFinally {
                     setIsLoadingOptions(false);
                 }
             };
@@ -413,9 +410,9 @@
             const handleAdminUpdate = async (rec) => {
                 setIsSyncing(true);
                 try {
-                    const res = await jsonpRequest({ action: 'updateRecord', ...rec });
+                    const res = await jsonpRequest({ action: 'updateRecord', ...rec, sapStatus: 'Validated by Admin' });
                     if (res.status === 'success') {
-                        showToast('✅ Record Validated & Updated!');
+                        showToast('✅ Record Validated & Added to Uploader!');
                         fetchAdminRecords();
                     }
                 } catch (e) {
@@ -747,7 +744,7 @@
                                 <table className="w-full text-xs text-left text-slate-300">
                                     <thead className="text-[11px] uppercase bg-slate-900 text-cyan-400 font-bold">
                                         <tr>
-                                            <th className="px-3 py-2">Row</th>
+                                            <th className="px-3 py-2">GS.No</th>
                                             <th className="px-3 py-2">REF NO</th>
                                             <th className="px-3 py-2">EMP ID</th>
                                             <th className="px-3 py-2">Name</th>
@@ -770,7 +767,7 @@
                                         ) : (
                                             allAdminRecords.map((rec) => (
                                                 <tr key={rec.rowIndex} className="hover:bg-slate-750">
-                                                    <td className="px-3 py-2 font-mono text-slate-400">{rec.rowIndex}</td>
+                                                    <td className="px-3 py-2 font-mono text-slate-400 font-bold">{rec.gsNo}</td>
                                                     <td className="px-3 py-2 font-mono text-cyan-400 font-bold">{rec.refNumber || '-'}</td>
                                                     <td className="px-3 py-2 font-mono text-cyan-300 font-bold">{rec.empId}</td>
                                                     <td className="px-3 py-2 font-medium text-white">{rec.fullName}</td>
@@ -784,7 +781,7 @@
                                                     <td className="px-3 py-2 font-semibold text-emerald-400">{rec.sapStatus || 'Pending'}</td>
                                                     <td className="px-3 py-2 text-center space-x-1">
                                                         <button 
-                                                            onClick={() => handleAdminUpdate({ rowIndex: rec.rowIndex, sapStatus: 'Validated by Admin' })} 
+                                                            onClick={() => handleAdminUpdate(rec)} 
                                                             className="bg-emerald-700 hover:bg-emerald-600 text-white px-2 py-1 rounded text-[10px] font-bold shadow"
                                                         >
                                                             Validate
