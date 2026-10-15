@@ -367,6 +367,15 @@
                 }));
             };
 
+            const handleAdminIoChange = (rowIndex, val) => {
+                setAllAdminRecords(prev => prev.map(item => {
+                    if (item.rowIndex === rowIndex) {
+                        return { ...item, ioNo: val };
+                    }
+                    return item;
+                }));
+            };
+
             const handleFetchDataForId = async (empIdToFetch) => {
                 if (!empIdToFetch) return;
 
@@ -413,7 +422,20 @@
             const handleAdminUpdate = async (rec) => {
                 setIsSyncing(true);
                 try {
-                    const res = await jsonpRequest({ action: 'updateRecord', ...rec, sapStatus: 'Validated by Admin' });
+                    const res = await jsonpRequest({ 
+                        action: 'updateRecord', 
+                        rowIndex: rec.rowIndex,
+                        empId: rec.empId,
+                        fullName: rec.fullName,
+                        department: rec.department,
+                        email: rec.email,
+                        eventDate: rec.eventDate,
+                        contributionAmt: rec.contributionAmt,
+                        glCode: rec.glCode,
+                        costCenter: rec.costCenter,
+                        ioNo: rec.ioNo || '',
+                        sapStatus: 'Validated by Admin' 
+                    });
                     if (res.status === 'success') {
                         showToast('✅ Record Validated & Added to Uploader!');
                         fetchAdminRecords();
@@ -757,7 +779,7 @@
                                             <th className="px-3 py-2">Amt</th>
                                             <th className="px-3 py-2">GL Code</th>
                                             <th className="px-3 py-2">Cost Center</th>
-                                            <th className="px-3 py-2">IO No</th>
+                                            <th className="px-3 py-2">IO NO</th>
                                             <th className="px-3 py-2">SAP Status</th>
                                             <th className="px-3 py-2 text-center">Actions</th>
                                         </tr>
@@ -780,11 +802,19 @@
                                                     <td className="px-3 py-2 font-bold text-amber-300">₹{rec.contributionAmt}</td>
                                                     <td className="px-3 py-2 font-mono">{rec.glCode}</td>
                                                     <td className="px-3 py-2 font-mono">{rec.costCenter || '-'}</td>
-                                                    <td className="px-3 py-2 font-mono">{rec.ioNo || '-'}</td>
+                                                    <td className="px-3 py-2">
+                                                        <input 
+                                                            type="text" 
+                                                            value={rec.ioNo || ''} 
+                                                            onChange={(e) => handleAdminIoChange(rec.rowIndex, e.target.value)}
+                                                            placeholder="Enter IO NO"
+                                                            className="w-28 bg-slate-900 border border-slate-600 focus:border-cyan-400 rounded px-2 py-1 font-mono text-cyan-300 text-xs focus:outline-none"
+                                                        />
+                                                    </td>
                                                     <td className="px-3 py-2 font-semibold text-emerald-400">{rec.sapStatus || 'Pending'}</td>
                                                     <td className="px-3 py-2 text-center space-x-1">
                                                         <button 
-                                                            onClick={() => handleAdminUpdate({ rowIndex: rec.rowIndex, sapStatus: 'Validated by Admin' })} 
+                                                            onClick={() => handleAdminUpdate(rec)} 
                                                             className="bg-emerald-700 hover:bg-emerald-600 text-white px-2 py-1 rounded text-[10px] font-bold shadow"
                                                         >
                                                             Validate
@@ -1311,36 +1341,4 @@
                                                 <td className="px-4 py-3 font-medium text-white">{rec.fullName}</td>
                                                 <td className="px-4 py-3">{rec.department}</td>
                                                 <td className="px-4 py-3">{rec.email}</td>
-                                                <td className="px-4 py-3">{rec.location || '-'}</td>
-                                                <td className="px-4 py-3">{rec.eventType || '-'}</td>
-                                                <td className="px-4 py-3">{rec.beneficiaryCategory || '-'}</td>
-                                                <td className="px-4 py-3 font-mono">{rec.contributionAmt || '-'}</td>
-                                                <td className="px-4 py-3 font-mono text-xs">{rec.eventDate || '-'}</td>
-                                                <td className="px-4 py-3">{rec.beneficiaryName || '-'}</td>
-                                                <td className="px-4 py-3">{rec.ioNo || '-'}</td>
-                                                <td className="px-4 py-3 font-mono">{rec.glCode || '-'}</td>
-                                                <td className="px-4 py-3 font-mono">{rec.costCenter || '-'}</td>
-                                                <td className="px-4 py-3 text-center">
-                                                    <button 
-                                                        type="button"
-                                                        onClick={() => setPdfData(rec)}
-                                                        className="bg-cyan-900/60 hover:bg-cyan-800 text-cyan-300 text-xs font-semibold px-2.5 py-1 rounded border border-cyan-700/60 transition-all shadow"
-                                                    >
-                                                        📄 PDF
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            );
-        }
-
-        ReactDOM.createRoot(document.getElementById('root')).render(<App />);
-    </script>
-</body>
-</html>
+                                                <td
