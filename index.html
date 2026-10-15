@@ -36,11 +36,9 @@
     <script type="text/babel">
         const { useState, useEffect } = React;
 
-        // PASTE YOUR WEBSCRIPT DEPLOYMENT URL HERE (MUST END WITH /exec)
         const API_URL = "https://script.google.com/macros/s/AKfycbwDcANmvvvzWKurM8oeVqzky6oRl7-geRY3UZRQbnz1hFbNmVRcikvoUhqvqQ2AhmnMmg/exec";
 
         function App() {
-            // Auth States
             const [isAuthenticated, setIsAuthenticated] = useState(false);
             const [credentials, setCredentials] = useState({ userId: '', password: '' });
             const [userRole, setUserRole] = useState('Normal');
@@ -49,7 +47,6 @@
             const [isAuthenticating, setIsAuthenticating] = useState(false);
             const [authError, setAuthError] = useState('');
 
-            // Dropdown Dynamic Options
             const [locations, setLocations] = useState([]);
             const [eventTypes, setEventTypes] = useState([]);
             const [beneficiaryCategories, setBeneficiaryCategories] = useState([]);
@@ -57,7 +54,6 @@
             const [costCenters, setCostCenters] = useState([]);
             const [isLoadingOptions, setIsLoadingOptions] = useState(false);
 
-            // App Form States
             const [formData, setFormData] = useState({
                 empId: '',
                 fullName: '',
@@ -103,7 +99,6 @@
                 }
             }, []);
 
-            // USER-SPECIFIC LOCAL STORAGE LOAD
             useEffect(() => {
                 if (isAuthenticated && loggedInUserId) {
                     const storageKey = `user_private_records_${loggedInUserId}`;
@@ -124,7 +119,6 @@
                 }
             }, [isAuthenticated, loggedInUserId, userRole]);
 
-            // USER-SPECIFIC LOCAL STORAGE SAVE
             useEffect(() => {
                 if (isAuthenticated && loggedInUserId) {
                     const storageKey = `user_private_records_${loggedInUserId}`;
@@ -136,7 +130,6 @@
                 fetchDropdownOptions();
             }, []);
 
-            // Auto-fetch employee details for normal users once authenticated
             useEffect(() => {
                 if (isAuthenticated && userRole !== 'Admin' && loggedInUserId) {
                     handleFetchDataForId(loggedInUserId);
@@ -682,7 +675,6 @@
 
             return (
                 <div className="max-w-4xl mx-auto p-6">
-                    {/* TOP HEADER SECTION */}
                     <div className="flex justify-between items-center mb-8 no-print flex-wrap gap-4">
                         <div className="relative group">
                             <div className="absolute -inset-1 bg-gradient-to-r from-cyan-500 via-teal-400 to-blue-600 rounded-2xl blur-md opacity-70 group-hover:opacity-100 transition duration-500"></div>
@@ -749,7 +741,6 @@
                         </div>
                     )}
 
-                    {/* ADMIN VIEW ALL GOOGLE SHEET RECORDS */}
                     {userRole === 'Admin' && (
                         <div className="bg-slate-800 p-6 rounded-xl border border-amber-500/40 shadow-xl mb-8 no-print">
                             <div className="flex justify-between items-center mb-4">
@@ -835,7 +826,6 @@
                         </div>
                     )}
 
-                    {/* MODAL 1: CONFIRM CLEAR LOCAL HISTORY (ADMIN ONLY) */}
                     {showConfirmModal && userRole === 'Admin' && (
                         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 no-print">
                             <div className="bg-slate-800 border border-slate-700 rounded-xl p-6 max-w-sm w-full shadow-2xl space-y-4">
@@ -868,7 +858,6 @@
                         </div>
                     )}
 
-                    {/* MODAL 2: SAME DATE ATTENDANCE WARNING */}
                     {sameDateWarningModal && (
                         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 no-print">
                             <div className="bg-slate-800 border border-amber-500/60 rounded-xl p-6 max-w-md w-full shadow-2xl space-y-4">
@@ -908,7 +897,6 @@
                         </div>
                     )}
 
-                    {/* RECEIPT PREVIEW MODAL */}
                     {pdfData && (
                         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto no-print">
                             <div className="bg-slate-800 border border-slate-700 rounded-xl max-w-2xl w-full p-6 shadow-2xl flex flex-col my-auto">
@@ -946,7 +934,6 @@
                                 <div className="overflow-y-auto max-h-[75vh] pr-1">
                                     <div id="printable-receipt" style={{ backgroundColor: '#ffffff', color: '#1e293b', padding: '32px', fontFamily: 'Arial, sans-serif', fontSize: '13px', borderRadius: '8px' }}>
                                         
-                                        {/* Header */}
                                         <table style={{ width: '100%', borderBottom: '2px solid #0284c7', paddingBottom: '12px', marginBottom: '24px' }}>
                                             <tbody>
                                                 <tr>
@@ -965,7 +952,6 @@
                                             </tbody>
                                         </table>
 
-                                        {/* Data Fields */}
                                         <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '24px' }}>
                                             <tbody>
                                                 <tr>
@@ -1024,12 +1010,10 @@
                                             </tbody>
                                         </table>
 
-                                        {/* Notes Section */}
                                         <div style={{ backgroundColor: '#f8fafc', padding: '12px 14px', border: '1px solid #cbd5e1', borderRadius: '6px', marginBottom: '20px' }}>
                                             <strong style={{ color: '#334155' }}>Notes:</strong> <span style={{ color: '#0f172a' }}>{pdfData.notes ? pdfData.notes : '-'}</span>
                                         </div>
 
-                                        {/* Declaration Box */}
                                         <div style={{ border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', padding: '14px 16px', borderRadius: '6px', marginBottom: '24px' }}>
                                             <h4 style={{ fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase', color: '#1e293b', margin: '0 0 4px 0' }}>Declaration</h4>
                                             <p style={{ fontSize: '11px', color: '#334155', fontStyle: 'italic', margin: 0, lineHeight: '1.5' }}>
@@ -1037,14 +1021,12 @@
                                             </p>
                                         </div>
 
-                                        {/* SAP Document No line */}
                                         <div style={{ marginTop: '40px', marginBottom: '30px', paddingLeft: '4px' }}>
                                             <p style={{ fontSize: '12px', fontWeight: 'bold', color: '#334155', margin: 0 }}>
                                                 SAP Document No: <span style={{ borderBottom: '1px solid #94a3b8', display: 'inline-block', width: '220px', marginLeft: '8px' }}>&nbsp;</span>
                                             </p>
                                         </div>
 
-                                        {/* Signatures */}
                                         <div style={{ paddingTop: '30px', paddingBottom: '10px' }}>
                                             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                                                 <tbody>
@@ -1071,11 +1053,8 @@
                         </div>
                     )}
 
-                    {/* FORM CONTAINER */}
                     <div className="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-xl mb-8 no-print">
                         <form onSubmit={handleSubmit} className="space-y-4">
-                            
-                            {/* TOP HEADER ROW */}
                             <div className="flex items-center justify-between pb-1">
                                 <button 
                                     type="button"
@@ -1092,7 +1071,6 @@
                                 </p>
                             </div>
 
-                            {/* ROW 1 */}
                             <div className="flex flex-wrap items-center gap-3">
                                 <div className="w-full sm:w-36">
                                     <label className="block text-sm font-bold text-slate-200 mb-1">
@@ -1149,7 +1127,6 @@
                                 </div>
                             </div>
 
-                            {/* ROW 2 - DYNAMIC DROPDOWNS FROM SHEET "Input" */}
                             <div className="flex flex-wrap items-center gap-3 pt-1">
                                 <div className="w-full sm:flex-1 min-w-[180px]">
                                     <label className="block text-sm font-bold text-slate-200 mb-1">Location</label>
@@ -1200,7 +1177,6 @@
                                 </div>
                             </div>
 
-                            {/* ROW 3 */}
                             <div className="flex flex-wrap items-center gap-3 pt-1">
                                 <div className="w-full sm:flex-1 min-w-[180px]">
                                     <label className="block text-sm font-bold text-slate-200 mb-1">Contribution Amt</label>
@@ -1241,7 +1217,6 @@
                                 </div>
                             </div>
 
-                            {/* ROW 4 - IO NO, GL CODE, AND COST CENTER */}
                             <div className="flex flex-wrap items-center gap-3 pt-1">
                                 <div className="w-full sm:flex-1 min-w-[180px]">
                                     <label className="block text-sm font-bold text-slate-200 mb-1">IO No</label>
@@ -1303,7 +1278,6 @@
                         </form>
                     </div>
 
-                    {/* SUBMITTED RECORDS TABLE */}
                     {records.length > 0 && (
                         <div className="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-xl no-print">
                             <div className="flex justify-between items-center mb-4">
@@ -1341,4 +1315,36 @@
                                                 <td className="px-4 py-3 font-medium text-white">{rec.fullName}</td>
                                                 <td className="px-4 py-3">{rec.department}</td>
                                                 <td className="px-4 py-3">{rec.email}</td>
-                                                <td
+                                                <td className="px-4 py-3">{rec.location || '-'}</td>
+                                                <td className="px-4 py-3">{rec.eventType || '-'}</td>
+                                                <td className="px-4 py-3">{rec.beneficiaryCategory || '-'}</td>
+                                                <td className="px-4 py-3 font-mono">{rec.contributionAmt || '-'}</td>
+                                                <td className="px-4 py-3 font-mono text-xs">{rec.eventDate || '-'}</td>
+                                                <td className="px-4 py-3">{rec.beneficiaryName || '-'}</td>
+                                                <td className="px-4 py-3">{rec.ioNo || '-'}</td>
+                                                <td className="px-4 py-3 font-mono">{rec.glCode || '-'}</td>
+                                                <td className="px-4 py-3 font-mono">{rec.costCenter || '-'}</td>
+                                                <td className="px-4 py-3 text-center">
+                                                    <button 
+                                                        type="button"
+                                                        onClick={() => setPdfData(rec)}
+                                                        className="bg-cyan-900/60 hover:bg-cyan-800 text-cyan-300 text-xs font-semibold px-2.5 py-1 rounded border border-cyan-700/60 transition-all shadow"
+                                                    >
+                                                        📄 PDF
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+    </script>
+</body>
+</html>
