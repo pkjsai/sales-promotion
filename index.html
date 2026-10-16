@@ -71,7 +71,8 @@
                 ioNo: '',
                 glCode: '',
                 costCenter: '',
-                notes: ''
+                notes: '',
+                hasExceptionApproval: false
             });
 
             const [records, setRecords] = useState([]);
@@ -82,6 +83,8 @@
             const [toast, setToast] = useState('');
             const [showConfirmModal, setShowConfirmModal] = useState(false);
             const [sameDateWarningModal, setSameDateWarningModal] = useState(false);
+            const [delayWarningModal, setDelayWarningModal] = useState(false);
+            const [pendingDelayDays, setPendingDelayDays] = useState(0);
             const [pdfData, setPdfData] = useState(null);
 
             useEffect(() => {
@@ -203,6 +206,27 @@
                 return rawDateStr.replace(/\./g, '');
             };
 
+            const parseDDMMYYToDate = (dateStr) => {
+                if (!isValidDDMMYY(dateStr)) return null;
+                const parts = dateStr.split('.');
+                const day = parseInt(parts[0], 10);
+                const month = parseInt(parts[1], 10) - 1;
+                const year = 2000 + parseInt(parts[2], 10);
+                return new Date(year, month, day);
+            };
+
+            const calculateDayGap = (eventDateStr) => {
+                const parsedEventDate = parseDDMMYYToDate(eventDateStr);
+                if (!parsedEventDate) return 0;
+                
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                parsedEventDate.setHours(0, 0, 0, 0);
+
+                const diffTime = today.getTime() - parsedEventDate.getTime();
+                return Math.floor(diffTime / (1000 * 60 * 60 * 24));
+            };
+
             const handleEventDateChange = (e) => {
                 let val = e.target.value.replace(/[^0-9.]/g, '');
                 if (/^\d{6}$/.test(val)) {
@@ -320,14 +344,16 @@
                             ioNo: '',
                             glCode: glCodes.length > 0 ? glCodes[0] : '',
                             costCenter: costCenters.length > 0 ? costCenters[0] : '',
-                            notes: ''
+                            notes: '',
+                            hasExceptionApproval: false
                         });
                     } else {
                         setAuthError('❌ Invalid User ID or Password.');
                     }
                 } catch (err) {
                     setAuthError('❌ Network connection error. Please try logging in again.');
-                } finally {
+                } font-semibold
+                finally {
                     setIsAuthenticating(false);
                 }
             };
@@ -344,7 +370,8 @@
                 setFormData({
                     empId: '', fullName: '', department: '', email: '', location: '',
                     eventType: '', beneficiaryCategory: '', contributionAmt: '',
-                    eventDate: '', beneficiaryName: '', ioNo: '', glCode: '', costCenter: '', notes: ''
+                    eventDate: '', beneficiaryName: '', ioNo: '', glCode: '', costCenter: '', notes: '',
+                    hasExceptionApproval: false
                 });
             };
 
@@ -531,6 +558,14 @@
                     return;
                 }
 
+                // Check 15 days delay gap rule
+                const daysGap = calculateDayGap(formData.eventDate);
+                if (daysGap > 15 && !formData.hasExceptionApproval) {
+                    setPendingDelayDays(daysGap);
+                    setDelayWarningModal(true);
+                    return;
+                }
+
                 const hasSameDateEntry = checkSource.some(rec => 
                     String(rec.empId || '').trim() === String(formData.empId || '').trim() &&
                     cleanDDMMYY(rec.eventDate) === cleanDDMMYY(formData.eventDate)
@@ -541,10 +576,27 @@
                     return;
                 }
 
-                executeSubmission();
+                executeSubmission(formData.hasExceptionApproval);
             };
 
-            const executeSubmission = async () => {
+            const handleConfirmDelayException = () => {
+                setFormData(prev => ({ ...prev, hasExceptionApproval: true }));
+                setDelayWarningModal(false);
+
+                const checkSource = userRole === 'Admin' && allAdminRecords.length > 0 ? allAdminRecords : records;
+                const hasSameDateEntry = checkSource.some(rec => 
+                    String(rec.empId || '').trim() === String(formData.empId || '').trim() &&
+                    cleanDDMMYY(rec.eventDate) === cleanDDMMYY(formData.eventDate)
+                );
+
+                if (hasSameDateEntry) {
+                    setSameDateWarningModal(true);
+                } else {
+                    executeSubmission(true);
+                }
+            };
+
+            const executeSubmission = async (exceptionApprovalState = formData.hasExceptionApproval) => {
                 setIsSyncing(true);
                 setSameDateWarningModal(false);
 
@@ -555,7 +607,8 @@
                     id: Date.now(), 
                     refNumber, 
                     timestamp, 
-                    ...formData 
+                    ...formData,
+                    hasExceptionApproval: exceptionApprovalState
                 };
 
                 try {
@@ -576,7 +629,8 @@
                         notes: formData.notes,
                         glCode: formData.glCode,
                         costCenter: formData.costCenter,
-                        ioNo: formData.ioNo
+                        ioNo: formData.ioNo,
+                        hasExceptionApproval: exceptionApprovalState ? 'Yes' : 'No'
                     });
 
                     setRecords(prev => {
@@ -606,7 +660,8 @@
                         ioNo: '',
                         glCode: glCodes.length > 0 ? glCodes[0] : '',
                         costCenter: costCenters.length > 0 ? costCenters[0] : '',
-                        notes: ''
+                        notes: '',
+                        hasExceptionApproval: false
                     }));
                 } catch (err) {
                     showToast('❌ Error submitting data.');
@@ -990,10 +1045,52 @@
                                     </button>
                                     <button 
                                         type="button"
-                                        onClick={executeSubmission}
+                                        onClick={() => executeSubmission()}
                                         className="px-4 py-2 rounded text-xs font-semibold bg-cyan-600 hover:bg-cyan-500 text-white transition-all shadow"
                                     >
                                         Yes (Submit Data)
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* MODAL 3: 15 DAYS DELAY EXCEPTION APPROVAL MODAL */}
+                    {delayWarningModal && (
+                        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 no-print">
+                            <div className="bg-slate-800 border border-amber-500/60 rounded-xl p-6 max-w-md w-full shadow-2xl space-y-4">
+                                <div className="flex items-center space-x-3">
+                                    <div className="p-2 bg-amber-500/20 text-amber-400 rounded-lg">
+                                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                                        </svg>
+                                    </div>
+                                    <h3 className="text-lg font-bold text-white">Claim Submission Delay Warning</h3>
+                                </div>
+                                
+                                <div className="text-sm text-slate-200 space-y-2">
+                                    <p className="font-semibold text-amber-300">
+                                        Your claim submission period is above 15 days ({pendingDelayDays} days gap).
+                                    </p>
+                                    <p className="text-slate-300 text-xs">
+                                        Have you taken exception approval? If Yes then continue, or Cancel submission.
+                                    </p>
+                                </div>
+
+                                <div className="flex justify-end space-x-3 pt-3">
+                                    <button 
+                                        type="button"
+                                        onClick={() => setDelayWarningModal(false)}
+                                        className="px-4 py-2 rounded text-xs font-semibold bg-rose-700 hover:bg-rose-600 text-white transition-all shadow"
+                                    >
+                                        Cancel Submission
+                                    </button>
+                                    <button 
+                                        type="button"
+                                        onClick={handleConfirmDelayException}
+                                        className="px-4 py-2 rounded text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition-all shadow"
+                                    >
+                                        Yes (Continue)
                                     </button>
                                 </div>
                             </div>
@@ -1117,6 +1214,15 @@
                                         <div style={{ backgroundColor: '#f8fafc', padding: '12px 14px', border: '1px solid #cbd5e1', borderRadius: '6px', marginBottom: '20px' }}>
                                             <strong style={{ color: '#334155' }}>Notes:</strong> <span style={{ color: '#0f172a' }}>{pdfData.notes ? pdfData.notes : '-'}</span>
                                         </div>
+
+                                        {pdfData.hasExceptionApproval && (
+                                            <div style={{ backgroundColor: '#fef3c7', border: '1px solid #f59e0b', padding: '10px 14px', borderRadius: '6px', marginBottom: '20px', display: 'flex', alignItems: 'center' }}>
+                                                <span style={{ fontSize: '14px', marginRight: '8px', border: '1px solid #d97706', padding: '1px 5px', borderRadius: '3px', backgroundColor: '#ffffff', fontWeight: 'bold' }}>☑</span>
+                                                <span style={{ color: '#92400e', fontWeight: 'bold', fontSize: '12px' }}>
+                                                    Exception approval delay claim submission with Box yes
+                                                </span>
+                                            </div>
+                                        )}
 
                                         <div style={{ border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', padding: '14px 16px', borderRadius: '6px', marginBottom: '24px' }}>
                                             <h4 style={{ fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase', color: '#1e293b', margin: '0 0 4px 0' }}>Declaration</h4>
