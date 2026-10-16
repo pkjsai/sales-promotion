@@ -417,11 +417,10 @@
             };
 
             const handleSelectAll = () => {
-                const pendingRows = allAdminRecords.filter(r => !r.isValidated).map(r => r.rowIndex);
-                if (selectedRows.length === pendingRows.length) {
+                if (selectedRows.length === allAdminRecords.length) {
                     setSelectedRows([]);
                 } else {
-                    setSelectedRows(pendingRows);
+                    setSelectedRows(allAdminRecords.map(r => r.rowIndex));
                 }
             };
 
@@ -519,6 +518,39 @@
                 }
             };
 
+            const handleBulkPostSapGui = async () => {
+                if (selectedRows.length === 0) {
+                    showToast('⚠️ Please select at least one validated row for SAP GUI Posting.');
+                    return;
+                }
+
+                const validatedSelected = allAdminRecords.filter(r => selectedRows.includes(r.rowIndex) && r.isValidated);
+
+                if (validatedSelected.length === 0) {
+                    showToast('⚠️ None of the selected rows are validated yet.');
+                    return;
+                }
+
+                setIsSyncing(true);
+                try {
+                    const res = await jsonpRequest({
+                        action: 'bulkPostSapGui',
+                        rowIndices: JSON.stringify(validatedSelected.map(r => r.rowIndex))
+                    });
+
+                    if (res.status === 'success') {
+                        showToast(`🚀 ${res.message}`);
+                        fetchAdminRecords();
+                    } else {
+                        showToast('❌ Bulk SAP GUI Posting failed.');
+                    }
+                } catch (e) {
+                    showToast('❌ Error executing bulk SAP GUI Posting.');
+                } finally {
+                    setIsSyncing(false);
+                }
+            };
+
             const handleBulkValidate = async () => {
                 if (selectedRows.length === 0) {
                     showToast('⚠️ Please select at least one row to validate.');
@@ -556,6 +588,34 @@
                     }
                 } catch (e) {
                     showToast('❌ Error performing bulk validation.');
+                } finally {
+                    setIsSyncing(false);
+                }
+            };
+
+            const handleBulkDelete = async () => {
+                if (selectedRows.length === 0) {
+                    showToast('⚠️ Please select at least one row to delete.');
+                    return;
+                }
+
+                if (!confirm(`Are you sure you want to delete ${selectedRows.length} selected row(s) from Google Sheet?`)) return;
+
+                setIsSyncing(true);
+                try {
+                    const res = await jsonpRequest({
+                        action: 'bulkDeleteRecords',
+                        rowIndices: JSON.stringify(selectedRows)
+                    });
+
+                    if (res.status === 'success') {
+                        showToast(`🗑️ ${res.message}`);
+                        fetchAdminRecords();
+                    } else {
+                        showToast('❌ Bulk deletion failed.');
+                    }
+                } catch (e) {
+                    showToast('❌ Error performing bulk deletion.');
                 } finally {
                     setIsSyncing(false);
                 }
@@ -890,18 +950,34 @@
                                     <h2 className="text-xl font-bold text-amber-300 flex items-center space-x-2">
                                         <span>👑 Admin Validation Dashboard</span>
                                     </h2>
-                                    <p className="text-xs text-slate-400 mt-0.5">Validate records with mandatory IO NO. Once validated, click "Post (SAP GUI)" to trigger posting.</p>
+                                    <p className="text-xs text-slate-400 mt-0.5">Validate, post, or delete records individually or in bulk.</p>
                                 </div>
                                 
-                                <div className="flex items-center space-x-3">
+                                <div className="flex items-center space-x-2 flex-wrap gap-2">
                                     <button 
                                         onClick={handleBulkValidate}
                                         disabled={selectedRows.length === 0 || isSyncing}
-                                        className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-bold px-4 py-2 rounded transition-all shadow flex items-center space-x-1.5"
+                                        className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-bold px-3 py-2 rounded transition-all shadow flex items-center space-x-1"
                                     >
-                                        <span>✅</span>
-                                        <span>Validate Selected ({selectedRows.length})</span>
+                                        <span>✅ Validate ({selectedRows.length})</span>
                                     </button>
+
+                                    <button 
+                                        onClick={handleBulkPostSapGui}
+                                        disabled={selectedRows.length === 0 || isSyncing}
+                                        className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-bold px-3 py-2 rounded transition-all shadow flex items-center space-x-1"
+                                    >
+                                        <span>🚀 Post SAP GUI ({selectedRows.length})</span>
+                                    </button>
+
+                                    <button 
+                                        onClick={handleBulkDelete}
+                                        disabled={selectedRows.length === 0 || isSyncing}
+                                        className="bg-rose-700 hover:bg-rose-600 disabled:opacity-50 text-white text-xs font-bold px-3 py-2 rounded transition-all shadow flex items-center space-x-1"
+                                    >
+                                        <span>🗑️ Delete ({selectedRows.length})</span>
+                                    </button>
+
                                     <button 
                                         onClick={fetchAdminRecords} 
                                         className="bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold px-3 py-2 rounded transition-all shadow"
@@ -919,7 +995,7 @@
                                                 <input 
                                                     type="checkbox" 
                                                     onChange={handleSelectAll} 
-                                                    checked={selectedRows.length > 0 && selectedRows.length === allAdminRecords.filter(r => !r.isValidated).length}
+                                                    checked={selectedRows.length > 0 && selectedRows.length === allAdminRecords.length}
                                                     className="rounded cursor-pointer"
                                                 />
                                             </th>
@@ -947,10 +1023,9 @@
                                                     <td className="px-3 py-2 text-center">
                                                         <input 
                                                             type="checkbox" 
-                                                            disabled={rec.isValidated}
                                                             checked={selectedRows.includes(rec.rowIndex)}
                                                             onChange={() => handleSelectRow(rec.rowIndex)}
-                                                            className="rounded cursor-pointer disabled:cursor-not-allowed"
+                                                            className="rounded cursor-pointer"
                                                         />
                                                     </td>
                                                     <td className="px-3 py-2 font-mono text-slate-400 font-bold">{rec.gsNo}</td>
