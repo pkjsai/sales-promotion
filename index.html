@@ -247,7 +247,7 @@
                 const sequenceNum = matchingEntries.length + 1;
                 const formattedSeq = sequenceNum < 10 ? `0${sequenceNum}` : `${sequenceNum}`;
 
-                return `${empIdVal}${formattedDate}-${formattedSeq}`;
+                return `${formattedDate}-${formattedSeq}`;
             };
 
             const jsonpRequest = (params, retries = 3) => {
