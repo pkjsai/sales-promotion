@@ -36,7 +36,8 @@
     <script type="text/babel">
         const { useState, useEffect } = React;
 
-        const API_URL = "https://script.google.com/macros/s/AKfycbxrwTQ-mJ9GPtu2NJRyu0W-XCFyOLVMWWCvdG92aRjkT_95XAnIelNVH6MZ3I1r_hz1Yg/exec";
+        // Replace with your Google Apps Script Web App URL
+        const API_URL = "https://script.google.com/macros/s/AKfycbwDcANmvvvzWKurM8oeVqzky6oRl7-geRY3UZRQbnz1hFbNmVRcikvoUhqvqQ2AhmnMmg/exec";
 
         function App() {
             // Auth States
@@ -366,7 +367,7 @@
                         setAuthError('❌ Invalid User ID or Password.');
                     }
                 } catch (err) {
-                    setAuthError('❌ Network connection error. Please try logging in again.');
+                    setAuthError('❌ Network connection error. Please verify Google Script Deployment.');
                 } finally {
                     setIsAuthenticating(false);
                 }
@@ -486,7 +487,7 @@
                         ioNo: rec.ioNo ? rec.ioNo.trim() : ''
                     });
                     if (res.status === 'success') {
-                        showToast('✅ Record Validated & Added to Uploader!');
+                        showToast('✅ Record Validated!');
                         fetchAdminRecords();
                     } else {
                         showToast(`⚠️ ${res.message}`);
@@ -498,7 +499,6 @@
                 }
             };
 
-            // TRIGGER LOCAL PYTHON SCRIPT AUTOMATICALLY
             const handlePostSapGui = async (rec) => {
                 setIsSyncing(true);
                 try {
@@ -529,7 +529,6 @@
                 }
             };
 
-            // BULK TRIGGER FOR LOCAL PYTHON SCRIPT
             const handleBulkPostSapGui = async () => {
                 if (selectedRows.length === 0) {
                     showToast('⚠️ Please select at least one validated row for SAP GUI Posting.');
