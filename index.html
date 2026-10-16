@@ -235,6 +235,23 @@
                 setFormData(prev => ({ ...prev, eventDate: val }));
             };
 
+            // Helper to strictly format REF NO as DDMMYY-SEQ without EMP ID
+            const formatCleanRefNo = (rawRefStr, eventDateVal) => {
+                if (!rawRefStr) return '';
+                const cleanDate = cleanDDMMYY(eventDateVal);
+                
+                // If contains hyphen, take sequence part from after hyphen
+                if (rawRefStr.includes('-')) {
+                    const parts = rawRefStr.split('-');
+                    const seq = parts[parts.length - 1];
+                    if (cleanDate) {
+                        return `${cleanDate}-${seq}`;
+                    }
+                    return parts.slice(-2).join('-');
+                }
+                return rawRefStr;
+            };
+
             const generateRefNumber = (empIdVal, eventDateVal, localRecords, adminRecords) => {
                 const formattedDate = cleanDDMMYY(eventDateVal);
                 const sourceList = userRole === 'Admin' && adminRecords.length > 0 ? adminRecords : localRecords;
@@ -685,7 +702,7 @@
                 const element = document.getElementById('printable-receipt');
                 const opt = {
                     margin:       0.3,
-                    filename:     `Claim_Form_${pdfData.empId}_${pdfData.refNumber || pdfData.id}.pdf`,
+                    filename:     `Claim_Form_${pdfData.empId}_${formatCleanRefNo(pdfData.refNumber, pdfData.eventDate) || pdfData.id}.pdf`,
                     image:        { type: 'jpeg', quality: 0.98 },
                     html2canvas:  { scale: 2, useCORS: true },
                     jsPDF:        { unit: 'in', format: 'a4', orientation: 'portrait' }
@@ -708,7 +725,11 @@
                     showToast('⚠️ No records to export!');
                     return;
                 }
-                const exportData = records.map(({ id, ...rest }) => rest);
+                const exportData = records.map(({ id, refNumber, eventDate, ...rest }) => ({
+                    refNumber: formatCleanRefNo(refNumber, eventDate),
+                    eventDate,
+                    ...rest
+                }));
                 const worksheet = XLSX.utils.json_to_sheet(exportData);
                 const workbook = XLSX.utils.book_new();
                 XLSX.utils.book_append_sheet(workbook, worksheet, "My Submissions");
@@ -916,7 +937,7 @@
                                                         />
                                                     </td>
                                                     <td className="px-3 py-2 font-mono text-slate-400 font-bold">{rec.gsNo}</td>
-                                                    <td className="px-3 py-2 font-mono text-cyan-400 font-bold">{rec.refNumber || '-'}</td>
+                                                    <td className="px-3 py-2 font-mono text-cyan-400 font-bold">{formatCleanRefNo(rec.refNumber, rec.eventDate) || '-'}</td>
                                                     <td className="px-3 py-2 font-mono text-cyan-300 font-bold">{rec.empId}</td>
                                                     <td className="px-3 py-2 font-medium text-white">{rec.fullName}</td>
                                                     <td className="px-3 py-2 font-mono">{rec.eventDate}</td>
@@ -1145,7 +1166,7 @@
                                                     </td>
                                                     <td style={{ textAlign: 'right', verticalAlign: 'top' }}>
                                                         <p style={{ fontSize: '15px', fontWeight: 'bold', color: '#0284c7', margin: 0, fontFamily: 'monospace' }}>
-                                                            REF NO: {pdfData.refNumber || `#${pdfData.id}`}
+                                                            REF NO: {formatCleanRefNo(pdfData.refNumber, pdfData.eventDate) || `#${pdfData.id}`}
                                                         </p>
                                                     </td>
                                                 </tr>
@@ -1215,7 +1236,7 @@
                                         </div>
 
                                         {pdfData.hasExceptionApproval && (
-                                            <div style={{ backgroundColor: '#fef3c7', border: '1px solid #f59e0b', padding: '10px 14px', borderRadius: '6px', marginBottom: '20px', display: 'flex', alignItems: 'center' }}>
+                                            <div style={{ backgroundColor: '#fef3c7', border: '1px solid #f59e0b', padding: '10px 14px', borderRadius: '6px', marginBottom: '20px', display: 'flex', itemsCenter: 'center' }}>
                                                 <span style={{ fontSize: '14px', marginRight: '8px', border: '1px solid #d97706', padding: '1px 5px', borderRadius: '3px', backgroundColor: '#ffffff', fontWeight: 'bold' }}>☑</span>
                                                 <span style={{ color: '#92400e', fontWeight: 'bold', fontSize: '12px' }}>
                                                     Exception approval of delay claim submission
@@ -1520,7 +1541,7 @@
                                     <tbody className="divide-y divide-slate-700">
                                         {records.map((rec) => (
                                             <tr key={rec.id} className="hover:bg-slate-750">
-                                                <td className="px-4 py-3 font-semibold text-cyan-400 font-mono">{rec.refNumber || '-'}</td>
+                                                <td className="px-4 py-3 font-semibold text-cyan-400 font-mono">{formatCleanRefNo(rec.refNumber, rec.eventDate) || '-'}</td>
                                                 <td className="px-4 py-3 text-xs text-slate-400">{rec.timestamp}</td>
                                                 <td className="px-4 py-3 font-semibold text-cyan-400 font-mono">{rec.empId}</td>
                                                 <td className="px-4 py-3 font-medium text-white">{rec.fullName}</td>
