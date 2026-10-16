@@ -36,7 +36,7 @@
     <script type="text/babel">
         const { useState, useEffect } = React;
 
-        const API_URL = "https://script.google.com/macros/s/AKfycbxrwTQ-mJ9GPtu2NJRyu0W-XCFyOLVMWWCvdG92aRjkT_95XAnIelNVH6MZ3I1r_hz1Yg/exec";
+        const API_URL = "https://script.google.com/macros/s/AKfycbwDcANmvvvzWKurM8oeVqzky6oRl7-geRY3UZRQbnz1hFbNmVRcikvoUhqvqQ2AhmnMmg/exec";
 
         function App() {
             // Auth States
@@ -498,7 +498,7 @@
                 }
             };
 
-            // ALIGNED WITH AUTOMATED LOCAL SAP BRIDGE TRIGGER
+            // TRIGGER LOCAL PYTHON SCRIPT AUTOMATICALLY
             const handlePostSapGui = async (rec) => {
                 setIsSyncing(true);
                 try {
@@ -517,7 +517,7 @@
                                 showToast('🤖 Local SAP Bot execution started!');
                             }
                         } catch (err) {
-                            showToast('⚠️ Updated in Sheet, but Local SAP Bridge is not running on PC.');
+                            showToast('⚠️ Status updated in sheet, but Local SAP Bridge is not running on PC.');
                         }
                     } else {
                         showToast(`⚠️ ${res.message}`);
@@ -529,7 +529,7 @@
                 }
             };
 
-            // ALIGNED WITH BULK AUTOMATED LOCAL SAP BRIDGE TRIGGER
+            // BULK TRIGGER FOR LOCAL PYTHON SCRIPT
             const handleBulkPostSapGui = async () => {
                 if (selectedRows.length === 0) {
                     showToast('⚠️ Please select at least one validated row for SAP GUI Posting.');
@@ -558,10 +558,10 @@
                             const localRes = await fetch('http://127.0.0.1:5000/run-sap', { method: 'POST' });
                             const localData = await localRes.json();
                             if (localData.status === 'success') {
-                                showToast('🤖 Local SAP Bot started!');
+                                showToast('🤖 Local SAP Bot started for selected claims!');
                             }
                         } catch (err) {
-                            showToast('⚠️ Updated in Sheet, but Local SAP Bridge is not running on PC.');
+                            showToast('⚠️ Status updated in sheet, but Local SAP Bridge is not running on PC.');
                         }
                     } else {
                         showToast('❌ Bulk SAP GUI Posting failed.');
