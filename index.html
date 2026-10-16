@@ -235,12 +235,10 @@
                 setFormData(prev => ({ ...prev, eventDate: val }));
             };
 
-            // Helper to strictly format REF NO as DDMMYY-SEQ without EMP ID
             const formatCleanRefNo = (rawRefStr, eventDateVal) => {
                 if (!rawRefStr) return '';
                 const cleanDate = cleanDDMMYY(eventDateVal);
                 
-                // If contains hyphen, take sequence part from after hyphen
                 if (rawRefStr.includes('-')) {
                     const parts = rawRefStr.split('-');
                     const seq = parts[parts.length - 1];
@@ -475,12 +473,18 @@
                     showToast('⚠️ Row already validated!');
                     return;
                 }
+
+                if (!rec.ioNo || rec.ioNo.trim() === '') {
+                    showToast('❌ IO NO is compulsory for validation!');
+                    return;
+                }
+
                 setIsSyncing(true);
                 try {
                     const res = await jsonpRequest({ 
                         action: 'updateRecord', 
                         rowIndex: rec.rowIndex,
-                        ioNo: rec.ioNo || ''
+                        ioNo: rec.ioNo ? rec.ioNo.trim() : ''
                     });
                     if (res.status === 'success') {
                         showToast('✅ Record Validated & Added to Uploader!');
@@ -495,6 +499,26 @@
                 }
             };
 
+            const handlePostSapGui = async (rec) => {
+                setIsSyncing(true);
+                try {
+                    const res = await jsonpRequest({ 
+                        action: 'postSapGui', 
+                        rowIndex: rec.rowIndex
+                    });
+                    if (res.status === 'success') {
+                        showToast('🚀 Record status set to "Ready for SAP"!');
+                        fetchAdminRecords();
+                    } else {
+                        showToast(`⚠️ ${res.message}`);
+                    }
+                } catch (e) {
+                    showToast('❌ Failed to update SAP GUI status');
+                } finally {
+                    setIsSyncing(false);
+                }
+            };
+
             const handleBulkValidate = async () => {
                 if (selectedRows.length === 0) {
                     showToast('⚠️ Please select at least one row to validate.');
@@ -502,6 +526,12 @@
                 }
 
                 const recordsToValidate = allAdminRecords.filter(r => selectedRows.includes(r.rowIndex) && !r.isValidated);
+
+                const missingIo = recordsToValidate.some(r => !r.ioNo || r.ioNo.trim() === '');
+                if (missingIo) {
+                    showToast('❌ All selected rows must have a valid IO NO filled before bulk validation!');
+                    return;
+                }
 
                 if (recordsToValidate.length === 0) {
                     showToast('⚠️ Selected row(s) are already validated.');
@@ -574,7 +604,6 @@
                     return;
                 }
 
-                // Check 15 days delay gap rule
                 const daysGap = calculateDayGap(formData.eventDate);
                 if (daysGap > 15 && !formData.hasExceptionApproval) {
                     setPendingDelayDays(daysGap);
@@ -742,12 +771,6 @@
                     <div className="flex items-center justify-center min-h-screen p-4">
                         <div className="bg-slate-800 border border-slate-700 rounded-2xl p-8 max-w-md w-full shadow-2xl">
                             <div className="flex flex-col items-center mb-6">
-                                <img 
-                                    src="logo.png" 
-                                    alt="Logo" 
-                                    className="h-12 w-auto mb-3 object-contain rounded bg-white p-1 shadow"
-                                    onError={(e) => { e.target.style.display = 'none'; }}
-                                />
                                 <h2 className="text-xl font-bold text-cyan-400">Portal Access Required</h2>
                                 <p className="text-xs text-slate-400 mt-1">Sign in with your credentials</p>
                             </div>
@@ -850,12 +873,6 @@
                             >
                                 🚪 Logout
                             </button>
-                            <img 
-                                src="logo.png" 
-                                alt="Logo" 
-                                className="h-10 w-auto object-contain rounded bg-white p-1 shadow"
-                                onError={(e) => { e.target.style.display = 'none'; }}
-                            />
                         </div>
                     </div>
 
@@ -865,7 +882,7 @@
                         </div>
                     )}
 
-                    {/* ADMIN DASHBOARD WITH BULK VALIDATE & DUPLICATE CHECK BADGES */}
+                    {/* ADMIN DASHBOARD */}
                     {userRole === 'Admin' && (
                         <div className="bg-slate-800 p-6 rounded-xl border border-amber-500/40 shadow-xl mb-8 no-print">
                             <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
@@ -873,7 +890,7 @@
                                     <h2 className="text-xl font-bold text-amber-300 flex items-center space-x-2">
                                         <span>👑 Admin Validation Dashboard</span>
                                     </h2>
-                                    <p className="text-xs text-slate-400 mt-0.5">Validate records individually or in bulk. Once validated, records are locked and pushed to Uploader.</p>
+                                    <p className="text-xs text-slate-400 mt-0.5">Validate records with mandatory IO NO. Once validated, click "Post (SAP GUI)" to trigger posting.</p>
                                 </div>
                                 
                                 <div className="flex items-center space-x-3">
@@ -913,7 +930,7 @@
                                             <th className="px-3 py-2.5">Event Date</th>
                                             <th className="px-3 py-2.5">Beneficiary Name</th>
                                             <th className="px-3 py-2.5">Amt</th>
-                                            <th className="px-3 py-2.5">IO NO</th>
+                                            <th className="px-3 py-2.5">IO NO *</th>
                                             <th className="px-3 py-2.5">Duplicate</th>
                                             <th className="px-3 py-2.5">Validation</th>
                                             <th className="px-3 py-2.5 text-center">Actions</th>
@@ -949,8 +966,11 @@
                                                             disabled={rec.isValidated}
                                                             value={rec.ioNo || ''} 
                                                             onChange={(e) => handleAdminIoChange(rec.rowIndex, e.target.value)}
-                                                            placeholder="IO NO"
-                                                            className="w-28 bg-slate-900 border border-slate-600 focus:border-cyan-400 rounded px-2 py-1 font-mono text-cyan-300 text-xs focus:outline-none disabled:opacity-50 disabled:bg-slate-800"
+                                                            placeholder="IO NO (Required)"
+                                                            required
+                                                            className={`w-32 border rounded px-2 py-1 font-mono text-xs focus:outline-none disabled:opacity-50 disabled:bg-slate-800 ${
+                                                                !rec.ioNo ? 'bg-slate-900 border-rose-500/80 text-rose-300 placeholder-rose-400/60' : 'bg-slate-900 border-slate-600 focus:border-cyan-400 text-cyan-300'
+                                                            }`}
                                                         />
                                                     </td>
                                                     <td className="px-3 py-2">
@@ -972,7 +992,7 @@
                                                         {rec.isValidated ? (
                                                             <span className="text-emerald-400 flex items-center space-x-1 font-bold">
                                                                 <span>🔒</span>
-                                                                <span>Validated</span>
+                                                                <span>{rec.sapStatus === 'Ready for SAP' ? 'Ready for SAP' : 'Validated'}</span>
                                                             </span>
                                                         ) : (
                                                             <span className="text-amber-400 font-bold">Pending</span>
@@ -986,6 +1006,15 @@
                                                         >
                                                             {rec.isValidated ? 'Locked' : 'Validate'}
                                                         </button>
+
+                                                        <button 
+                                                            onClick={() => handlePostSapGui(rec)} 
+                                                            disabled={!rec.isValidated || rec.sapStatus === 'Ready for SAP'}
+                                                            className="bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 disabled:text-slate-500 text-white px-2.5 py-1 rounded text-[10px] font-bold shadow transition-all disabled:cursor-not-allowed"
+                                                        >
+                                                            Post (SAP GUI)
+                                                        </button>
+
                                                         <button 
                                                             onClick={() => handleAdminDelete(rec.rowIndex)} 
                                                             className="bg-rose-700 hover:bg-rose-600 text-white px-2.5 py-1 rounded text-[10px] font-bold shadow transition-all"
